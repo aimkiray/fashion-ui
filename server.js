@@ -173,7 +173,11 @@ function styledSubject(gender, style, femaleBase, maleBase, customStylePrompt = 
   const isM = gender === 'male';
   const base = isM ? maleBase : femaleBase;
   if (customStylePrompt && typeof customStylePrompt === 'string' && customStylePrompt.trim()) {
-    return `${base} ${customStylePrompt.trim()}`;
+    const trimmed = customStylePrompt.trim();
+    if (trimmed.startsWith(',') || trimmed.startsWith('with ')) {
+      return `${base} ${trimmed}`;
+    }
+    return `${base}, ${trimmed}`;
   }
   const s = MODEL_STYLES[style] || MODEL_STYLES.classic;
   const modifier = isM ? s.male : s.female;
@@ -878,8 +882,9 @@ async function runGenerationJob(taskId) {
 
   const cleanCustom = stripTextboxNoise(task.custom_prompt);
   const cleanCustomScene = stripTextboxNoise(task.custom_scene);
+  const cleanCustomModelStyle = stripTextboxNoise(task.model_style_prompt);
 
-  const prompts = task.scene.buildPrompts(task.gender, cleanCustom, cleanCustomScene, task.model_style || 'classic', task.model_style_prompt || '');
+  const prompts = task.scene.buildPrompts(task.gender, cleanCustom, cleanCustomScene, task.model_style || 'classic', cleanCustomModelStyle);
 
   const sceneDisplayName = task.scene.id === 'custom'
     ? (cleanCustomScene ? `自定义场景: ${cleanCustomScene.slice(0, 16)}` : '自定义专属场景')
@@ -1038,7 +1043,7 @@ async function runGenerationJob(taskId) {
           kreaWf['10']['inputs']['grounding_px'] = 1024;
         }
 
-        const subj = styledSubject(task.gender, task.model_style || 'classic', 'stylish female model', 'handsome male model', task.model_style_prompt || '');
+        const subj = styledSubject(task.gender, task.model_style || 'classic', 'stylish female model', 'handsome male model', cleanCustomModelStyle);
         kreaWf['9']['inputs']['prompt'] = `a ${subj} standing full-length in the background environment from the first reference image, wearing the exact clothing and outfit from the second reference image, full body editorial lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed expression, closed lips, realistic illumination matched to the background environment, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave, shot on 35mm lens, subtle film grain, soft contact shadows${cleanCustom ? ', ' + cleanCustom : ''}`;
       }
     }

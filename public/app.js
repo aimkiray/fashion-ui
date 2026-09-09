@@ -146,7 +146,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function loadStoredStylePrompts() {
     try {
       const raw = localStorage.getItem(STYLE_PROMPTS_KEY);
-      return raw ? JSON.parse(raw) : {};
+      const parsed = raw ? JSON.parse(raw) : null;
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
     } catch (e) {
       return {};
     }
@@ -210,7 +211,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (val.female) DEFAULT_STYLE_PROMPTS.female[key] = val.female;
         if (val.male) DEFAULT_STYLE_PROMPTS.male[key] = val.male;
       }
-      updateModelStylePromptUI();
+      if (document.activeElement !== modelStylePromptInput) {
+        updateModelStylePromptUI();
+      }
     } catch (e) {}
   }
 
