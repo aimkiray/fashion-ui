@@ -865,7 +865,6 @@ kbd {
   border-radius: 8px;
   overflow: hidden;
   transition: var(--transition);
-  margin-top: 14px;
 }
 
 .prompt-inspector-details:hover {

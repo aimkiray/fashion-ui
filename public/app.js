@@ -565,6 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <p class="scene-desc">${sc.description}</p>
         `;
         card.addEventListener('click', () => {
+          const sceneChanged = (selectedScene !== sc.id);
           document.querySelectorAll('.scene-card').forEach(c => c.classList.remove('selected'));
           card.classList.add('selected');
           selectedScene = sc.id;
@@ -590,7 +591,16 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           saveUserOptions();
           updateBatchHint();
-          queueRefreshPromptInspector();
+
+          if (sceneChanged) {
+            const diffs = getPromptInspectorDiffs();
+            if (diffs.hasAnyDiff) {
+              showToast(`已切换至【${sc.name}】，提示词已自动同步为新场景配置`);
+            }
+            refreshPromptInspector(true);
+          } else {
+            queueRefreshPromptInspector();
+          }
         });
         sceneGrid.appendChild(card);
       });
@@ -920,13 +930,58 @@ document.addEventListener('DOMContentLoaded', () => {
   // -------------------------------------------------------------
   // Prompt Inspector & Fine-Tuning Controller
   // -------------------------------------------------------------
+  function normalizePromptText(val) {
+    if (!val) return '';
+    return val.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  }
+
+  function getPromptInspectorDiffs() {
+    const kreaVal = inspectorKreaPrompt ? inspectorKreaPrompt.value : '';
+    const seg1Val = inspectorSeg1Prompt ? inspectorSeg1Prompt.value : '';
+    const seg2Val = inspectorSeg2Prompt ? inspectorSeg2Prompt.value : '';
+
+    const normKrea = normalizePromptText(kreaVal);
+    const normSeg1 = normalizePromptText(seg1Val);
+    const normSeg2 = normalizePromptText(seg2Val);
+
+    const normAutoKrea = normalizePromptText(cachedAutoPrompts.krea_prompt);
+    const normAutoSeg1 = normalizePromptText(cachedAutoPrompts.seg1_prompt);
+    const normAutoSeg2 = normalizePromptText(cachedAutoPrompts.seg2_prompt);
+
+    const kreaDiff = Boolean(normAutoKrea && normKrea !== normAutoKrea);
+    const seg1Diff = Boolean(normAutoSeg1 && normSeg1 !== normAutoSeg1);
+    const seg2Diff = Boolean(normAutoSeg2 && normSeg2 !== normAutoSeg2);
+
+    return {
+      kreaDiff,
+      seg1Diff,
+      seg2Diff,
+      hasAnyDiff: kreaDiff || seg1Diff || seg2Diff,
+      kreaVal,
+      seg1Val,
+      seg2Val
+    };
+  }
+
+  function getSceneName(sceneId) {
+    const card = document.querySelector(`.scene-card[data-scene-id="${sceneId}"] .scene-name`);
+    if (card && card.textContent.trim()) {
+      return card.textContent.trim();
+    }
+    const map = {
+      street: '都市街拍',
+      studio: '纯色影棚',
+      office: '职场通勤',
+      boutique: '艺术买手店',
+      forest: '户外林荫',
+      cafe: '极简咖啡厅',
+      custom: '自定义场景'
+    };
+    return map[sceneId] || sceneId;
+  }
+
   async function refreshPromptInspector(force = false) {
     if (!inspectorKreaPrompt || !inspectorSeg1Prompt || !inspectorSeg2Prompt) return;
-
-    // If user has customized prompts and force is false, keep user edits intact
-    if (isPromptsCustomModified && !force) {
-      return;
-    }
 
     try {
       const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
@@ -954,18 +1009,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (!res.ok) return;
       const data = await res.json();
-      cachedAutoPrompts = { ...data };
 
-      if (!isPromptsCustomModified || force) {
+      const { kreaDiff, seg1Diff, seg2Diff } = getPromptInspectorDiffs();
+
+      // Only update fields that the user hasn't explicitly customized, or if force is true
+      if (!kreaDiff || force) {
         inspectorKreaPrompt.value = data.krea_prompt || '';
-        inspectorSeg1Prompt.value = data.seg1_prompt || '';
-        inspectorSeg2Prompt.value = data.seg2_prompt || '';
-
-        if (force) {
-          isPromptsCustomModified = false;
-        }
-        updatePromptInspectorBadges();
       }
+      if (!seg1Diff || force) {
+        inspectorSeg1Prompt.value = data.seg1_prompt || '';
+      }
+      if (!seg2Diff || force) {
+        inspectorSeg2Prompt.value = data.seg2_prompt || '';
+      }
+
+      cachedAutoPrompts = {
+        krea_prompt: data.krea_prompt || '',
+        seg1_prompt: data.seg1_prompt || '',
+        seg2_prompt: data.seg2_prompt || ''
+      };
+
+      if (force) {
+        isPromptsCustomModified = false;
+      }
+      updatePromptInspectorBadges();
     } catch (err) {
       console.warn('Failed to preview prompts:', err);
     }
@@ -979,18 +1046,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updatePromptInspectorBadges() {
-    const kreaVal = inspectorKreaPrompt ? inspectorKreaPrompt.value.trim() : '';
-    const seg1Val = inspectorSeg1Prompt ? inspectorSeg1Prompt.value.trim() : '';
-    const seg2Val = inspectorSeg2Prompt ? inspectorSeg2Prompt.value.trim() : '';
-
-    const kreaDiff = Boolean(kreaVal && kreaVal !== (cachedAutoPrompts.krea_prompt || '').trim());
-    const seg1Diff = Boolean(seg1Val && seg1Val !== (cachedAutoPrompts.seg1_prompt || '').trim());
-    const seg2Diff = Boolean(seg2Val && seg2Val !== (cachedAutoPrompts.seg2_prompt || '').trim());
-
-    isPromptsCustomModified = Boolean(kreaDiff || seg1Diff || seg2Diff);
+    const { kreaDiff, seg1Diff, seg2Diff, hasAnyDiff } = getPromptInspectorDiffs();
+    isPromptsCustomModified = hasAnyDiff;
 
     if (inspectorBadge) {
-      if (isPromptsCustomModified) {
+      if (hasAnyDiff) {
         inspectorBadge.textContent = '已微调';
         inspectorBadge.classList.add('modified');
       } else {
@@ -1143,6 +1203,8 @@ document.addEventListener('DOMContentLoaded', () => {
       startTimer();
       scrollToProgress();
 
+      const { kreaDiff, seg1Diff, seg2Diff } = getPromptInspectorDiffs();
+
       const genRes = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1158,9 +1220,9 @@ document.addEventListener('DOMContentLoaded', () => {
           custom_prompt: customPrompt,
           aspect_ratio: aspectRatio,
           mode: genMode,
-          krea_prompt: isPromptsCustomModified ? inspectorKreaPrompt.value : null,
-          seg1_prompt: isPromptsCustomModified ? inspectorSeg1Prompt.value : null,
-          seg2_prompt: isPromptsCustomModified ? inspectorSeg2Prompt.value : null
+          krea_prompt: kreaDiff ? inspectorKreaPrompt.value.trim() : null,
+          seg1_prompt: seg1Diff ? inspectorSeg1Prompt.value.trim() : null,
+          seg2_prompt: seg2Diff ? inspectorSeg2Prompt.value.trim() : null
         })
       });
       let genData;
@@ -1249,6 +1311,12 @@ document.addEventListener('DOMContentLoaded', () => {
         startTimer();
         scrollToProgress();
 
+        const { kreaDiff, seg1Diff, seg2Diff, hasAnyDiff } = getPromptInspectorDiffs();
+        if (hasAnyDiff) {
+          const scName = getSceneName(selectedScene);
+          showToast(`批量生成提示：已微调提示词将专用于【${scName}】，其他场景保持各自专属设计。`);
+        }
+
         const genRes = await fetch('/api/generate-batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1257,6 +1325,7 @@ document.addEventListener('DOMContentLoaded', () => {
             model_image: finalModelFilename,
             scene_image: finalSceneFilename,
             scenes: batchScenes,
+            scene: selectedScene,
             gender,
             model_style: modelStyle,
             model_style_prompt: modelStylePrompt,
@@ -1264,9 +1333,9 @@ document.addEventListener('DOMContentLoaded', () => {
             custom_scene: customScene,
             aspect_ratio: aspectRatio,
             mode: genMode,
-            krea_prompt: isPromptsCustomModified ? inspectorKreaPrompt.value : null,
-            seg1_prompt: isPromptsCustomModified ? inspectorSeg1Prompt.value : null,
-            seg2_prompt: isPromptsCustomModified ? inspectorSeg2Prompt.value : null
+            krea_prompt: kreaDiff ? inspectorKreaPrompt.value.trim() : null,
+            seg1_prompt: seg1Diff ? inspectorSeg1Prompt.value.trim() : null,
+            seg2_prompt: seg2Diff ? inspectorSeg2Prompt.value.trim() : null
           })
         });
         let batchResp;
