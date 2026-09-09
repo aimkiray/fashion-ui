@@ -594,6 +594,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tag.addEventListener('click', (e) => {
       e.preventDefault();
       const sceneDesc = tag.dataset.scene;
+      const tagLabel = tag.textContent.trim();
       if (customSceneText) {
         customSceneText.value = sceneDesc;
       }
@@ -607,6 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (customSceneText) customSceneText.focus();
         updateBatchHint();
       }
+      showToast(`已应用场景灵感: ${tagLabel}`);
       saveUserOptions();
     });
   });
@@ -818,14 +820,17 @@ document.addEventListener('DOMContentLoaded', () => {
     tag.addEventListener('click', (e) => {
       e.preventDefault();
       const insertText = tag.dataset.insert;
+      const tagLabel = tag.textContent.trim();
       if (!customPromptInput) return;
       const cur = customPromptInput.value.trim();
       if (!cur) {
         customPromptInput.value = insertText;
+        showToast(`已添加: ${tagLabel}`);
       } else if (cur.includes(insertText)) {
-        showToast(`已包含此要求: ${insertText}`);
+        showToast(`已包含此要求: ${tagLabel}`);
       } else {
-        customPromptInput.value = cur + '\n' + insertText;
+        customPromptInput.value = cur + ',\n' + insertText;
+        showToast(`已添加: ${tagLabel}`);
       }
       customPromptInput.focus();
       saveUserOptions();
