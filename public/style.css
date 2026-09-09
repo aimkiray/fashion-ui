@@ -719,6 +719,17 @@ kbd {
   flex-wrap: wrap;
 }
 
+.pills-grid-5 {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.pills-grid-5 .pill-label {
+  flex: none;
+  min-width: 0;
+}
+
 .pills-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2261,4 +2272,15 @@ kbd {
 .btn-primary:hover {
   opacity: 0.92;
   transform: translateY(-1px);
+}
+
+@media (max-width: 420px) {
+  .pills-grid-5 {
+    gap: 4px;
+  }
+
+  .pills-grid-5 .pill-label span {
+    padding: 7px 2px;
+    font-size: 11px;
+  }
 }

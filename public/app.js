@@ -209,6 +209,17 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     });
   }
 
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (apiConfigModal && apiConfigModal.style.display === 'flex') {
+        closeApiConfigModal();
+      }
+      if (lightboxModal && lightboxModal.style.display === 'flex') {
+        lightboxModal.style.display = 'none';
+      }
+    }
+  });
+
   if (btnToggleApiKey) {
     btnToggleApiKey.addEventListener('click', () => {
       if (!cfgApiKey) return;
@@ -1433,10 +1444,15 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       }
 
       const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'krea2';
-      if (stillEngine === 'gpt_image_2' && serverConfig && !serverConfig.hasApiKey) {
-        showToast('请先配置 OpenAI API Key 才能使用 GPT Image 2 引擎。', true);
-        openApiConfigModal();
-        return;
+      if (stillEngine === 'gpt_image_2') {
+        if (!serverConfig) {
+          await fetchServerConfig();
+        }
+        if (!serverConfig || !serverConfig.hasApiKey) {
+          showToast('请先配置 OpenAI API Key 才能使用 GPT Image 2 引擎。', true);
+          openApiConfigModal();
+          return;
+        }
       }
 
       setButtonsDisabled(true);
@@ -1564,10 +1580,15 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
         }
 
         const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'krea2';
-        if (stillEngine === 'gpt_image_2' && serverConfig && !serverConfig.hasApiKey) {
-          showToast('请先配置 OpenAI API Key 才能使用 GPT Image 2 引擎。', true);
-          openApiConfigModal();
-          return;
+        if (stillEngine === 'gpt_image_2') {
+          if (!serverConfig) {
+            await fetchServerConfig();
+          }
+          if (!serverConfig || !serverConfig.hasApiKey) {
+            showToast('请先配置 OpenAI API Key 才能使用 GPT Image 2 引擎。', true);
+            openApiConfigModal();
+            return;
+          }
         }
 
         setButtonsDisabled(true);

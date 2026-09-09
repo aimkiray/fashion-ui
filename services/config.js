@@ -52,10 +52,20 @@ try {
   persistedConfig = {};
 }
 
+function normalizeBaseUrl(url) {
+  if (!url || typeof url !== 'string') return 'https://api.openai.com/v1';
+  let clean = url.trim().replace(/\/+$/, '');
+  if (!clean) return 'https://api.openai.com/v1';
+  if (!clean.endsWith('/v1')) {
+    clean = `${clean}/v1`;
+  }
+  return clean;
+}
+
 function getRawConfig() {
   return {
     openaiApiKey: (process.env.OPENAI_API_KEY || persistedConfig.openaiApiKey || '').trim(),
-    openaiBaseUrl: (process.env.OPENAI_BASE_URL || persistedConfig.openaiBaseUrl || 'https://api.openai.com/v1').trim().replace(/\/$/, ''),
+    openaiBaseUrl: normalizeBaseUrl(process.env.OPENAI_BASE_URL || persistedConfig.openaiBaseUrl),
     openaiOrgId: (process.env.OPENAI_ORG_ID || persistedConfig.openaiOrgId || '').trim(),
     openaiProjectId: (process.env.OPENAI_PROJECT_ID || persistedConfig.openaiProjectId || '').trim(),
     openaiImageModel: (process.env.OPENAI_IMAGE_MODEL || persistedConfig.openaiImageModel || 'gpt-image-2').trim(),
@@ -89,8 +99,8 @@ function saveConfig(newConfig) {
     persistedConfig.openaiApiKey = newConfig.openaiApiKey.trim();
     process.env.OPENAI_API_KEY = persistedConfig.openaiApiKey;
   }
-  if (typeof newConfig.openaiBaseUrl === 'string' && newConfig.openaiBaseUrl.trim()) {
-    persistedConfig.openaiBaseUrl = newConfig.openaiBaseUrl.trim().replace(/\/$/, '');
+  if (typeof newConfig.openaiBaseUrl === 'string') {
+    persistedConfig.openaiBaseUrl = normalizeBaseUrl(newConfig.openaiBaseUrl);
     process.env.OPENAI_BASE_URL = persistedConfig.openaiBaseUrl;
   }
   if (typeof newConfig.openaiImageModel === 'string' && newConfig.openaiImageModel.trim()) {
@@ -109,8 +119,8 @@ function saveConfig(newConfig) {
 }
 
 async function testOpenAiConnection(customApiKey, customBaseUrl) {
-  const apiKey = (customApiKey || getRawConfig().openaiApiKey || '').trim();
-  const baseUrl = (customBaseUrl || getRawConfig().openaiBaseUrl || 'https://api.openai.com/v1').trim().replace(/\/$/, '');
+  const apiKey = (customApiKey && customApiKey.trim()) || getRawConfig().openaiApiKey || '';
+  const baseUrl = normalizeBaseUrl(customBaseUrl || getRawConfig().openaiBaseUrl);
 
   if (!apiKey) {
     return { ok: false, message: '请先填写 OpenAI API Key' };
@@ -122,7 +132,8 @@ async function testOpenAiConnection(customApiKey, customBaseUrl) {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
-      }
+      },
+      signal: AbortSignal.timeout(10000)
     });
 
     if (res.ok) {

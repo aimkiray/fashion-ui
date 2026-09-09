@@ -15,6 +15,7 @@ function fileToDataUrl(filePath) {
   let mime = 'image/png';
   if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
   else if (ext === '.webp') mime = 'image/webp';
+  else if (ext === '.bmp') mime = 'image/bmp';
   
   const b64 = fs.readFileSync(filePath).toString('base64');
   return `data:${mime};base64,${b64}`;
@@ -31,6 +32,19 @@ function mapAspectRatioToSize(aspectRatio) {
     default:
       return '1024x1360';
   }
+}
+
+// Extract base64 or URL from any supported OpenAI image payload shape
+function extractImageFromPayload(payload) {
+  if (!payload) return null;
+  if (typeof payload === 'string') return payload;
+  if (payload.b64_json) return payload.b64_json;
+  if (payload.image) return payload.image;
+  if (Array.isArray(payload.data) && payload.data[0]) {
+    return payload.data[0].b64_json || payload.data[0].url || payload.data[0].image || null;
+  }
+  if (payload.url) return payload.url;
+  return null;
 }
 
 async function relayOpenAiStream(stream, onProgress) {
@@ -64,17 +78,21 @@ async function relayOpenAiStream(stream, onProgress) {
             if (typeof onProgress === 'function') {
               onProgress(progressVal, `[GPT Image 2] 渲染流式预览中 (阶段 ${partialCount})...`);
             }
-          } else if (eventType === 'image_edit.completed') {
-            if (payload.b64_json) {
-              finalBase64 = payload.b64_json;
-            }
+          } else if (eventType === 'image_edit.completed' || eventType === 'image.completed' || eventType === 'completed') {
+            const candidate = extractImageFromPayload(payload);
+            if (candidate) finalBase64 = candidate;
           } else if (eventType === 'error' || parsed.eventName === 'error') {
-            const msg = payload.message || 'OpenAI stream error';
+            const msg = payload.message || payload.error?.message || 'OpenAI stream error';
             throw new Error(msg);
+          } else {
+            const candidate = extractImageFromPayload(payload);
+            if (candidate && !payload.partial) {
+              finalBase64 = candidate;
+            }
           }
         } catch (err) {
-          if (err.message && err.message.includes('OpenAI stream error')) throw err;
-          // Ignore JSON parse error on non-json SSE lines
+          if (err.message && (err.message.includes('OpenAI stream error') || err.message.includes('API'))) throw err;
+          // Ignore non-fatal JSON parse error on non-json SSE lines
         }
       }
 
@@ -89,7 +107,8 @@ async function relayOpenAiStream(stream, onProgress) {
     if (parsed && parsed.data !== '[DONE]') {
       try {
         const payload = JSON.parse(parsed.data);
-        if (payload.b64_json) finalBase64 = payload.b64_json;
+        const candidate = extractImageFromPayload(payload);
+        if (candidate) finalBase64 = candidate;
       } catch (e) {}
     }
   }
@@ -115,7 +134,7 @@ async function generateGptImage2({
   }
 
   const baseUrl = config.openaiBaseUrl || 'https://api.openai.com/v1';
-  const endpoint = `${baseUrl.replace(/\/$/, '')}/images/edits`;
+  const endpoint = `${baseUrl.replace(/\/+$/, '')}/images/edits`;
 
   const headers = {
     'Authorization': `Bearer ${config.openaiApiKey}`,
@@ -124,25 +143,39 @@ async function generateGptImage2({
   if (config.openaiOrgId) headers['OpenAI-Organization'] = config.openaiOrgId;
   if (config.openaiProjectId) headers['OpenAI-Project'] = config.openaiProjectId;
 
-  // Prepare input images (Garment is primary; Model or Scene can be secondary reference)
+  // Prepare input images with strict reference ordering:
+  // 1. If scene_image is present, the prompt specifies:
+  //    "background environment from the first reference image, wearing the exact clothing and outfit from the second reference image"
+  //    -> Image 1: Scene image, Image 2: Garment image
+  // 2. If model_image is present, the prompt specifies:
+  //    "Transfer the clothing and outfit from the first reference image onto the model in the second reference image"
+  //    -> Image 1: Garment image, Image 2: Model image
+  // 3. Otherwise:
+  //    -> Image 1: Garment image
   const images = [];
   const garmentPath = path.join(projectInputDir, task.image);
-  images.push({ image_url: fileToDataUrl(garmentPath) });
 
-  if (task.model_image) {
-    const modelPath = path.join(projectInputDir, task.model_image);
-    if (fs.existsSync(modelPath)) {
-      images.push({ image_url: fileToDataUrl(modelPath) });
-    }
-  } else if (task.scene_image) {
+  if (task.scene_image) {
     const scenePath = path.join(projectInputDir, task.scene_image);
     if (fs.existsSync(scenePath)) {
       images.push({ image_url: fileToDataUrl(scenePath) });
     }
+    images.push({ image_url: fileToDataUrl(garmentPath) });
+  } else if (task.model_image) {
+    images.push({ image_url: fileToDataUrl(garmentPath) });
+    const modelPath = path.join(projectInputDir, task.model_image);
+    if (fs.existsSync(modelPath)) {
+      images.push({ image_url: fileToDataUrl(modelPath) });
+    }
+  } else {
+    images.push({ image_url: fileToDataUrl(garmentPath) });
   }
 
   const imageSize = mapAspectRatioToSize(task.aspect_ratio);
-  const fullPrompt = `${prompt.trim()}\n\n${OPENAI_IMAGE_OUTPUT_REQUIREMENTS}`;
+  const trimmedPrompt = prompt.trim();
+  const fullPrompt = trimmedPrompt.includes('Output requirements:')
+    ? trimmedPrompt
+    : `${trimmedPrompt}\n\n${OPENAI_IMAGE_OUTPUT_REQUIREMENTS}`;
 
   if (typeof onProgress === 'function') {
     onProgress(12, '[GPT Image 2] 正在向 OpenAI 发起图像生成请求...');
@@ -159,11 +192,47 @@ async function generateGptImage2({
     partial_images: 2
   };
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(requestBody)
-  });
+  let response;
+  let usedStream = true;
+
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(180000)
+    });
+  } catch (netErr) {
+    throw new Error(`无法连接到 OpenAI 图像服务: ${netErr.message}`);
+  }
+
+  // If streaming request fails with 400 or 422 (common with non-streaming reverse proxies), retry with stream: false
+  if (!response.ok && (response.status === 400 || response.status === 422)) {
+    let errPayload = null;
+    try { errPayload = await response.clone().json(); } catch (e) {}
+    const errMsg = errPayload?.error?.message || '';
+
+    console.warn(`[GPT Image 2] 流式请求返回 HTTP ${response.status} (${errMsg})，尝试降级为非流式直接请求...`);
+    usedStream = false;
+    const nonStreamBody = {
+      model: config.openaiImageModel || 'gpt-image-2',
+      prompt: fullPrompt,
+      images: images,
+      size: imageSize,
+      quality: config.openaiImageQuality || 'high',
+      output_format: 'png'
+    };
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(nonStreamBody),
+        signal: AbortSignal.timeout(180000)
+      });
+    } catch (retryErr) {
+      throw new Error(`OpenAI 图像非流式重试失败: ${retryErr.message}`);
+    }
+  }
 
   if (!response.ok) {
     let message = `OpenAI API 请求失败 (${response.status})`;
@@ -179,29 +248,49 @@ async function generateGptImage2({
   let base64Output = null;
   const contentType = response.headers.get('content-type') || '';
 
-  if (contentType.includes('text/event-stream') && response.body) {
-    base64Output = await relayOpenAiStream(response.body, onProgress);
-  } else {
-    // Non-streaming JSON response fallback
-    const payload = await response.json();
-    if (payload.data && payload.data[0] && payload.data[0].b64_json) {
-      base64Output = payload.data[0].b64_json;
-    } else if (payload.data && payload.data[0] && payload.data[0].url) {
-      // If URL is returned instead of b64
-      const imgRes = await fetch(payload.data[0].url);
-      const arrayBuffer = await imgRes.arrayBuffer();
-      base64Output = Buffer.from(arrayBuffer).toString('base64');
+  if (usedStream && contentType.includes('text/event-stream') && response.body) {
+    try {
+      base64Output = await relayOpenAiStream(response.body, onProgress);
+    } catch (streamErr) {
+      console.warn('[GPT Image 2] 流式解析中断:', streamErr.message);
     }
+  }
+
+  // If streaming didn't produce base64Output (or if response wasn't event-stream)
+  if (!base64Output) {
+    try {
+      const payload = await response.json();
+      base64Output = extractImageFromPayload(payload);
+    } catch (e) {}
   }
 
   if (!base64Output) {
     throw new Error('GPT Image 2 未返回有效图像数据。');
   }
 
+  // If base64Output is an HTTP URL, download it
+  if (base64Output.startsWith('http://') || base64Output.startsWith('https://')) {
+    if (typeof onProgress === 'function') {
+      onProgress(35, '[GPT Image 2] 正在下载成片图像...');
+    }
+    const imgRes = await fetch(base64Output, { signal: AbortSignal.timeout(30000) });
+    if (!imgRes.ok) throw new Error(`成片图像下载失败 (HTTP ${imgRes.status})`);
+    const arrayBuffer = await imgRes.arrayBuffer();
+    base64Output = Buffer.from(arrayBuffer).toString('base64');
+  }
+
+  // Cleanly strip data:image/...;base64, prefix if present to avoid corrupting image bytes
+  base64Output = base64Output.replace(/^data:image\/[a-zA-Z+]+;base64,/, '').trim();
+
+  const imageBuffer = Buffer.from(base64Output, 'base64');
+  if (imageBuffer.length < 100) {
+    throw new Error('GPT Image 2 返回的图像数据无效或已损坏。');
+  }
+
   // Save generated image to PROJECT_IMAGE_DIR
   const savedFilename = `gpt2_${task.scene.id || 'scene'}_${taskId}.png`;
   const destPath = path.join(projectImageDir, savedFilename);
-  fs.writeFileSync(destPath, Buffer.from(base64Output, 'base64'));
+  fs.writeFileSync(destPath, imageBuffer);
 
   if (typeof onProgress === 'function') {
     onProgress(40, '[GPT Image 2] 定妆照已生成并保存。');
