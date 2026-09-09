@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Fashion Studio | 服装动态展示视频生成</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="vendor/phosphor/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-icon"><i class="ph ph-t-shirt"></i></div>
+        <div class="brand-text">
+          <h1>AI Fashion Studio</h1>
+          <p>服装展示视频生成 · MiniMax H3 × Krea-2</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <div class="status-chip" id="systemStatus">
+          <span class="pulse-dot"></span>
+          <span id="statusText">连接服务中...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="app-main">
+      <!-- Left Config Column -->
+      <section class="config-panel">
+        <div class="card-header">
+          <h2>上传服装照片</h2>
+          <span class="sub-hint">支持平铺挂拍、人台模特、真人实穿</span>
+        </div>
+
+        <!-- Upload Zone -->
+        <div class="upload-dropzone" id="dropzone">
+          <input type="file" id="fileInput" accept="image/*" style="display: none;">
+          <div class="dropzone-content" id="dropzonePrompt">
+            <div class="upload-icon"><i class="ph ph-upload-simple"></i></div>
+            <p class="primary-text">点击、拖拽<span class="paste-hint">或按 <kbd>Ctrl+V</kbd> 粘贴</span>上传</p>
+            <p class="secondary-text">支持 PNG, JPG, WebP, BMP 格式</p>
+          </div>
+          <div class="dropzone-preview" id="dropzonePreview" style="display: none;">
+            <img id="previewImg" src="" alt="上传预览">
+            <button class="btn-remove" id="btnRemoveImage" title="更换图片"><i class="ph ph-x"></i> 更换图片</button>
+          </div>
+        </div>
+
+        <!-- Preset Quick Selector -->
+        <div class="preset-section">
+          <span class="preset-label">或者使用预置样例快捷体验：</span>
+          <div class="preset-pills">
+            <button class="preset-btn" data-img="test_outfit.png">复古工装皮夹克</button>
+            <button class="preset-btn" data-img="outfit-streetwear.png">宽松解构牛仔</button>
+            <button class="preset-btn" data-img="green_dress.png">法式雪纺针织裙</button>
+            <button class="preset-btn" data-img="safari_outfit.png">经典工装平铺</button>
+          </div>
+        </div>
+
+        <!-- Model Reference Dropzone (Optional) -->
+        <div class="card-header mt-lg">
+          <h2>指定模特主角参考图 <span class="optional-badge">选填</span></h2>
+          <span class="sub-hint">精准锁定面部五官与发型特征</span>
+        </div>
+
+        <div class="upload-dropzone upload-dropzone-sm" id="modelDropzone">
+          <input type="file" id="modelFileInput" accept="image/*" style="display: none;">
+          <div class="dropzone-content" id="modelDropzonePrompt">
+            <div class="upload-icon-sm"><i class="ph ph-user-focus"></i></div>
+            <p class="primary-text">点击或拖拽上传模特参考图</p>
+            <p class="secondary-text">提取面部五官与发型，1:1 锁定主角面容与神态</p>
+          </div>
+          <div class="dropzone-preview" id="modelDropzonePreview" style="display: none;">
+            <img id="modelPreviewImg" src="" alt="模特参考预览">
+            <button class="btn-remove" id="btnRemoveModelImage" title="清除模特"><i class="ph ph-x"></i> 清除模特</button>
+          </div>
+        </div>
+
+        <!-- Scene Selection -->
+        <div class="card-header mt-lg">
+          <h2>选择展示场景</h2>
+          <span class="sub-hint">自动匹配运镜与打光风格</span>
+        </div>
+
+        <div class="scene-grid" id="sceneGrid">
+          <!-- Populated by JavaScript -->
+        </div>
+
+        <!-- Custom Scene Input Box (Expands when "自定义专属场景" is active) -->
+        <div id="customSceneWrapper" class="custom-scene-wrapper" style="display: none;">
+          <div class="option-label-row">
+            <label for="customSceneText">自定义展示场景详情（自由输入）</label>
+            <span class="label-hint">自动匹配该场景的光照、景深与音效</span>
+          </div>
+          <textarea 
+            id="customSceneText" 
+            class="textarea-custom" 
+            rows="3" 
+            placeholder="例如：夕阳下的海边沙滩，椰林随海风轻轻摇曳，金色晚霞映照细沙与海浪；或法国巴黎塞纳河畔，埃菲尔铁塔远景，秋日落叶林荫道与欧式复古路灯..."></textarea>
+          
+          <!-- Scene Quick Inspiration Tags -->
+          <div class="quick-tags">
+            <span class="quick-tags-title">场景灵感：</span>
+            <button type="button" class="quick-scene-tag" data-scene="海边日落沙滩，椰林随微风轻轻摇曳，金色余晖洒在海浪与细沙上，度假浪漫氛围"><i class="ph ph-waves"></i> 海滨日落沙滩</button>
+            <button type="button" class="quick-scene-tag" data-scene="瑞士阿尔卑斯雪山度假木屋阳台，远眺纯白雪峰，温暖阳光与纯净雪景"><i class="ph ph-snowflake"></i> 雪山度假木屋</button>
+            <button type="button" class="quick-scene-tag" data-scene="法国巴黎塞纳河畔，埃菲尔铁塔远景，秋日金黄落叶林荫道与欧式复古路灯"><i class="ph ph-bridge"></i> 巴黎塞纳河畔</button>
+            <button type="button" class="quick-scene-tag" data-scene="未来科技感赛博朋克都市街道，雨夜湿漉地面倒映紫蓝色霓虹光晕，科幻时尚"><i class="ph ph-city"></i> 赛博朋克都市</button>
+            <button type="button" class="quick-scene-tag" data-scene="东方江南古镇水乡，青石板古桥与流水小舟，白墙黛瓦，烟雨朦胧唯美意境"><i class="ph ph-bridge"></i> 江南水乡古镇</button>
+            <button type="button" class="quick-scene-tag" data-scene="豪华私人游艇顶层甲板，碧蓝地中海开阔海景，阳光微风与奢华度假质感"><i class="ph ph-sailboat"></i> 游艇甲板</button>
+            <button type="button" class="quick-scene-tag" data-scene="高档现代艺术美术馆空旷大厅，巨幅油画与柔和天光漫射，静谧艺术感"><i class="ph ph-bank"></i> 艺术展厅</button>
+          </div>
+
+          <!-- Scene Reference Image Upload (Optional) -->
+          <div class="scene-ref-section mt-md">
+            <div class="option-label-row">
+              <label>上传场景背景参考图 <span class="optional-badge">选填</span></label>
+              <span class="label-hint">提取该参考图的真实环境打光、色调与建筑/空间质感</span>
+            </div>
+            <div class="upload-dropzone upload-dropzone-sm" id="sceneDropzone">
+              <input type="file" id="sceneFileInput" accept="image/*" style="display: none;">
+              <div class="dropzone-content" id="sceneDropzonePrompt">
+                <div class="upload-icon-sm"><i class="ph ph-image-square"></i></div>
+                <p class="primary-text">点击或拖拽上传背景参考图</p>
+                <p class="secondary-text">支持实拍街道、室内展馆、自然风光等空间图</p>
+              </div>
+              <div class="dropzone-preview" id="sceneDropzonePreview" style="display: none;">
+                <img id="scenePreviewImg" src="" alt="场景参考预览">
+                <button class="btn-remove" id="btnRemoveSceneImage" title="清除背景图"><i class="ph ph-x"></i> 清除背景图</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Model & Options -->
+        <div class="card-header mt-lg">
+          <h2>模特与生成规格</h2>
+        </div>
+
+        <div class="options-row">
+          <!-- Gender / Model Selector -->
+          <div class="option-group">
+            <label>模特类型</label>
+            <div class="radio-pills">
+              <label class="pill-label">
+                <input type="radio" name="gender" value="female" checked>
+                <span>时尚女模</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="gender" value="male">
+                <span>潮流男模</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="option-group">
+            <label>模特风格</label>
+            <div class="radio-pills">
+              <label class="pill-label">
+                <input type="radio" name="modelStyle" value="classic" checked>
+                <span>高级名模</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelStyle" value="sweet">
+                <span>甜美清新</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelStyle" value="athletic">
+                <span>运动活力</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelStyle" value="mature">
+                <span>成熟御姐</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelStyle" value="cool">
+                <span>中性酷感</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="option-group">
+            <label>画幅比例</label>
+            <div class="radio-pills">
+              <label class="pill-label">
+                <input type="radio" name="aspectRatio" value="3:4" checked>
+                <span>3:4 (Lookbook推荐)</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="aspectRatio" value="9:16">
+                <span>9:16 (短视频/视频号)</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="aspectRatio" value="1:1">
+                <span>1:1 (电商正方)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="option-group">
+            <label>生成模式</label>
+            <div class="radio-pills">
+              <label class="pill-label">
+                <input type="radio" name="genMode" value="video" checked>
+                <span>10秒动态展示视频</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="genMode" value="still_only">
+                <span>快速试衣定妆照 (20s)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Custom Prompt Input -->
+          <div class="option-group">
+            <label for="customPrompt">个性化要求（自由输入）</label>
+            <textarea
+              id="customPrompt"
+              class="textarea-custom"
+              rows="5"
+              placeholder="请输入个性化定制要求（支持多行），例如：
+• 模特细节：戴墨镜、微卷长发、从容淡雅神采、高级名模感
+• 动作走位：自然垂手从容迈步、侧身45度特写服装剪裁
+• 场景光影：夕阳金色逆光、电影级浅景深、微风吹拂衣角"></textarea>
+            
+            <!-- Quick prompt inspiration tags -->
+            <div class="quick-tags">
+              <span class="quick-tags-title">推荐发型：</span>
+              <button type="button" class="quick-tag" data-insert="法式浪漫微卷长发，自然蓬松感"><i class="ph ph-scissors"></i> 法式微卷长发</button>
+              <button type="button" class="quick-tag" data-insert="及肩轻盈微扣锁骨短发，干练高级"><i class="ph ph-scissors"></i> 锁骨短发</button>
+              <button type="button" class="quick-tag" data-insert="利落高扎马尾发型，充满青春活力"><i class="ph ph-scissors"></i> 活力高马尾</button>
+              <button type="button" class="quick-tag" data-insert="柔顺自然垂坠黑长直发，清纯东方美感"><i class="ph ph-scissors"></i> 垂坠黑长直</button>
+              <button type="button" class="quick-tag" data-insert="韩系慵懒蓬松高丸子头，轻盈减龄"><i class="ph ph-scissors"></i> 蓬松高丸子头</button>
+            </div>
+            <div class="quick-tags">
+              <span class="quick-tags-title">姿态与光影：</span>
+              <button type="button" class="quick-tag" data-insert="双手自然垂放体侧，从容自信走姿"><i class="ph ph-user"></i> 自然垂手走姿</button>
+              <button type="button" class="quick-tag" data-insert="自然从容神情，闭唇优雅名模仪态"><i class="ph ph-sparkle"></i> 高级从容神态</button>
+              <button type="button" class="quick-tag" data-insert="侧身45度展示服装剪裁与版型"><i class="ph ph-ruler"></i> 侧身展示剪裁</button>
+              <button type="button" class="quick-tag" data-insert="慢动作优雅转身展示背面细节"><i class="ph ph-arrows-clockwise"></i> 转身展示背面</button>
+              <button type="button" class="quick-tag" data-insert="佩戴时尚黑色墨镜"><i class="ph ph-sunglasses"></i> 黑色墨镜</button>
+              <button type="button" class="quick-tag" data-insert="微风轻拂衣摆与发丝"><i class="ph ph-wind"></i> 微风吹拂发丝</button>
+              <button type="button" class="quick-tag" data-insert="电影级柔和逆光与景深虚化"><i class="ph ph-film-strip"></i> 电影柔和逆光</button>
+            </div>
+            <div class="quick-tags">
+              <span class="quick-tags-title">面料质感：</span>
+              <button type="button" class="quick-tag" data-insert="特写做旧复古皮质细腻纹理与金属拉链微光"><i class="ph ph-sparkle"></i> 复古皮质光泽</button>
+              <button type="button" class="quick-tag" data-insert="突出工装双口袋与弹性针织罗纹下摆剪裁"><i class="ph ph-ruler"></i> 工装罗纹剪裁</button>
+              <button type="button" class="quick-tag" data-insert="深色原牛直筒裤挺阔质感与金黄车缝线"><i class="ph ph-scissors"></i> 原色牛仔面料</button>
+              <button type="button" class="quick-tag" data-insert="内搭高领打底针织衫柔和哑光质感"><i class="ph ph-t-shirt"></i> 针织高领质感</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons (Single & Batch) -->
+        <div class="action-buttons-group">
+          <button class="btn-generate" id="btnGenerate">
+            <i class="ph ph-sparkle"></i> 生成单套场景视频
+          </button>
+          <button class="btn-generate-batch" id="btnGenerateBatch" title="自动排队顺序生成【都市街拍 + 纯色影棚 + 艺术买手店】3 套成片">
+            <i class="ph ph-lightning"></i> 一键批量生成 3 套场景视频
+          </button>
+        </div>
+        <p class="batch-hint">批量生成：系统自动选取【都市街拍、纯色影棚、艺术买手店】排队生成 3 套场景视频/定妆照，方便高效出片</p>
+      </section>
+
+      <!-- Right Result & Tracker Column -->
+      <section class="result-panel">
+        <!-- Progress Tracker Card -->
+        <div class="progress-card" id="progressCard" style="display: none;">
+          <div class="progress-header">
+            <h3 id="progressCardTitle">生成进度</h3>
+            <span class="timer-badge" id="elapsedTimer">00:00</span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progressBar" style="width: 5%;"></div>
+          </div>
+          <p class="progress-status-msg" id="progressStatusMsg">任务初始化中...</p>
+
+          <div class="stage-steps" id="stageSteps">
+            <div class="step-item" id="step1">
+              <span class="step-indicator">1</span>
+              <span class="step-text">上传解析与服装/模特特征提取</span>
+            </div>
+            <div class="step-item" id="step2">
+              <span class="step-indicator">2</span>
+              <span class="step-text">Krea-2 静态试衣定型（主角融合与服装上身）</span>
+            </div>
+            <div class="step-item" id="step3">
+              <span class="step-indicator">3</span>
+              <span class="step-text">MiniMax H3 分镜一：5秒迎面步态与全身垂坠</span>
+            </div>
+            <div class="step-item" id="step4">
+              <span class="step-indicator">4</span>
+              <span class="step-text">MiniMax H3 分镜二：5秒45°转体与剪裁特写</span>
+            </div>
+            <div class="step-item" id="step5">
+              <span class="step-indicator">5</span>
+              <span class="step-text">分镜平滑转场与音轨合成</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Result Showcase -->
+        <div class="showcase-card" id="showcaseCard">
+          <!-- Batch Navigation Bar (Active during/after batch generation) -->
+          <div class="batch-nav-bar" id="batchNavBar" style="display: none;">
+            <div class="batch-nav-header">
+              <div class="batch-nav-title">
+                <i class="ph ph-cards"></i>
+                <span id="batchTitleText">批量多风格成果 (3套场景)</span>
+                <span class="batch-progress-pill" id="batchProgressPill">已完成 0/3</span>
+              </div>
+              <div class="batch-nav-actions">
+                <button class="btn-tool-link" id="btnDownloadAllBatch"><i class="ph ph-download-simple"></i> 一键下载全部成片</button>
+              </div>
+            </div>
+            <div class="batch-tabs" id="batchTabs">
+              <!-- Rendered dynamically by JavaScript -->
+            </div>
+          </div>
+
+          <div class="showcase-empty" id="showcaseEmpty">
+            <div class="empty-icon"><i class="ph ph-t-shirt"></i></div>
+            <h3>等待开始生成</h3>
+            <p>上传或选择服装，点击「生成单套场景视频」或「一键批量生成 3 套场景」，产出真人服装动态展示</p>
+          </div>
+
+          <div class="showcase-content" id="showcaseContent" style="display: none;">
+            <div class="results-grid">
+              <!-- Stage 1 Output -->
+              <div class="result-box">
+                <div class="box-title">
+                  <span>阶段一：模特试衣定妆照</span>
+                  <div class="box-actions">
+                    <button class="btn-tool-link" id="btnZoomStill"><i class="ph ph-magnifying-glass-plus"></i> 放大</button>
+                    <a class="btn-download-link" id="downloadStillBtn" target="_blank" download>下载图片</a>
+                  </div>
+                </div>
+                <div class="image-frame cursor-pointer" id="stillFrameWrapper">
+                  <img id="resultStillImg" src="" alt="试衣定妆照">
+                </div>
+              </div>
+
+              <!-- Stage 2 Video Output -->
+              <div class="result-box" id="videoBox">
+                <div class="box-title">
+                  <span>阶段二：10秒展示视频（带原声）</span>
+                  <div class="box-actions">
+                    <button class="btn-tool-link" id="btnToggleAudio"><i class="ph ph-speaker-slash"></i> 声音</button>
+                    <a class="btn-download-link" id="downloadVideoBtn" target="_blank" download>下载 MP4</a>
+                  </div>
+                </div>
+                <div class="video-frame">
+                  <video id="resultVideo" controls autoplay muted loop playsinline>
+                    您的浏览器不支持视频标签。
+                  </video>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- History Gallery -->
+        <div class="history-section">
+          <div class="history-header">
+            <h3>生成历史</h3>
+            <button class="btn-refresh" id="btnRefreshHistory"><i class="ph ph-arrows-clockwise"></i> 刷新</button>
+          </div>
+          <div class="history-grid" id="historyGrid">
+            <!-- Populated by JavaScript -->
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Image Lightbox Modal -->
+  <div class="modal-overlay" id="lightboxModal" style="display: none;">
+    <div class="modal-content">
+      <img id="lightboxImg" src="" alt="大图预览">
+      <button class="modal-close" id="btnCloseLightbox"><i class="ph ph-x"></i></button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

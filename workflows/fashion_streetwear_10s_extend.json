@@ -1,0 +1,538 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "fashion_street_model.png"
+    }
+  },
+  "2": {
+    "class_type": "ResolutionSelector",
+    "inputs": {
+      "aspect_ratio": "3:4 (Portrait Standard)",
+      "megapixels": 0.86,
+      "multiple": 32,
+      "preview": ""
+    }
+  },
+  "3": {
+    "class_type": "easy int",
+    "inputs": {
+      "value": 5
+    }
+  },
+  "10": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "11": {
+    "class_type": "ModelPatchTorchSettings",
+    "inputs": {
+      "model": [
+        "10",
+        0
+      ],
+      "enable_fp16_accumulation": true
+    }
+  },
+  "12": {
+    "class_type": "PathchSageAttentionKJ",
+    "inputs": {
+      "model": [
+        "11",
+        0
+      ],
+      "sage_attention": "auto",
+      "allow_compile": true
+    }
+  },
+  "13": {
+    "class_type": "ModelAttentionBackend",
+    "inputs": {
+      "model": [
+        "12",
+        0
+      ],
+      "attention": "comfy kitchen attention"
+    }
+  },
+  "14": {
+    "class_type": "BlockSparseAttention",
+    "inputs": {
+      "model": [
+        "13",
+        0
+      ],
+      "selection": "Sol-Attn (adaptive tau)",
+      "selection.tau": 1.3,
+      "start_percent": 0.2,
+      "end_percent": 1.0,
+      "dense_blocks": "",
+      "min_tokens": 12288,
+      "extra_tokens": 256,
+      "sink_conditioning": "exact_kv_and_rows",
+      "verbose": false
+    }
+  },
+  "15": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "14",
+        0
+      ],
+      "lora_name": "H3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+      "strength_model": 1.0
+    }
+  },
+  "16": {
+    "class_type": "MiniMaxH3SigmaShift",
+    "inputs": {
+      "model": [
+        "15",
+        0
+      ],
+      "shift_video": 6.0,
+      "shift_audio": 3.0
+    }
+  },
+  "20": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    }
+  },
+  "21": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    }
+  },
+  "22": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    }
+  },
+  "30": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "3",
+        0
+      ]
+    }
+  },
+  "40": {
+    "class_type": "MiniMaxH3ImageToVideo",
+    "inputs": {
+      "clip": [
+        "20",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ],
+      "prompt": "A commercial streetwear lookbook fashion video faithful to the reference image: the stylish young woman wearing the identical outfit, a grey oversized hooded bomber jacket, black crop top, and dark grey baggy denim jeans with cuffed ankles, paired with white sneakers. Full-body tracking shot: she confidently walks forward toward the camera along a sunlit urban city sidewalk. Her hair and jacket hem gently sway with each natural step. Constant cinematic daylight, sharp fabric texture, realistic cloth physics, steady camera framing. \n\nAudio: gentle city ambient hum, crisp footsteps on asphalt sidewalk, soft rustle of fabric as she walks.",
+      "width": [
+        "2",
+        0
+      ],
+      "height": [
+        "2",
+        1
+      ],
+      "length": [
+        "30",
+        1
+      ],
+      "first_frame": [
+        "1",
+        0
+      ]
+    }
+  },
+  "41": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 777
+    }
+  },
+  "50": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "51": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "scheduler": "simple",
+      "steps": 8,
+      "denoise": 1.0
+    }
+  },
+  "52": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "conditioning": [
+        "40",
+        0
+      ]
+    }
+  },
+  "53": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "41",
+        0
+      ],
+      "guider": [
+        "52",
+        0
+      ],
+      "sampler": [
+        "50",
+        0
+      ],
+      "sigmas": [
+        "51",
+        0
+      ],
+      "latent_image": [
+        "40",
+        1
+      ]
+    }
+  },
+  "70": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "53",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ]
+    }
+  },
+  "71": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": [
+        "53",
+        0
+      ],
+      "vae": [
+        "22",
+        0
+      ]
+    }
+  },
+  "75": {
+    "class_type": "GetImageSizeAndCount",
+    "inputs": {
+      "image": [
+        "70",
+        0
+      ]
+    }
+  },
+  "90": {
+    "class_type": "easy int",
+    "inputs": {
+      "value": 39
+    }
+  },
+  "76": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "(a - b)",
+      "values.a": [
+        "75",
+        3
+      ],
+      "values.b": [
+        "90",
+        0
+      ]
+    }
+  },
+  "77": {
+    "class_type": "GetImageRangeFromBatch",
+    "inputs": {
+      "images": [
+        "75",
+        0
+      ],
+      "start_index": [
+        "76",
+        1
+      ],
+      "num_frames": 39
+    }
+  },
+  "78": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "(a / 24)",
+      "values.a": [
+        "76",
+        1
+      ]
+    }
+  },
+  "79": {
+    "class_type": "TrimAudioDuration",
+    "inputs": {
+      "audio": [
+        "71",
+        0
+      ],
+      "start_index": [
+        "78",
+        0
+      ],
+      "duration": 512
+    }
+  },
+  "81": {
+    "class_type": "MiniMaxH3ImageToVideo",
+    "inputs": {
+      "clip": [
+        "20",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ],
+      "prompt": "Continuing seamlessly from the previous walk: the same woman in the identical grey oversized jacket and baggy jeans slows her stride, turning her body 45 degrees to showcase the side silhouette and drape of the jacket, then glances back casually toward the camera. Steady slow camera pan capturing the rear cut, pocket stitching and denim folds. Consistent natural sunlight, warm city street background bokeh, stable anatomy. \n\nAudio: continuous street atmosphere, soft fabric movement sound, gentle city breeze.",
+      "width": [
+        "2",
+        0
+      ],
+      "height": [
+        "2",
+        1
+      ],
+      "length": 163,
+      "first_frame": [
+        "1",
+        0
+      ]
+    }
+  },
+  "82": {
+    "class_type": "MiniMaxH3AddGuide",
+    "inputs": {
+      "positive": [
+        "81",
+        0
+      ],
+      "latent": [
+        "81",
+        1
+      ],
+      "frame_idx": 0,
+      "vae": [
+        "21",
+        0
+      ],
+      "audio_vae": [
+        "22",
+        0
+      ],
+      "image": [
+        "77",
+        0
+      ],
+      "audio": [
+        "79",
+        0
+      ]
+    }
+  },
+  "83": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "conditioning": [
+        "82",
+        0
+      ]
+    }
+  },
+  "84": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 778
+    }
+  },
+  "85": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "scheduler": "simple",
+      "steps": 8,
+      "denoise": 1.0
+    }
+  },
+  "86": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "84",
+        0
+      ],
+      "guider": [
+        "83",
+        0
+      ],
+      "sampler": [
+        "50",
+        0
+      ],
+      "sigmas": [
+        "85",
+        0
+      ],
+      "latent_image": [
+        "81",
+        1
+      ]
+    }
+  },
+  "87": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "86",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ]
+    }
+  },
+  "88": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": [
+        "86",
+        0
+      ],
+      "vae": [
+        "22",
+        0
+      ]
+    }
+  },
+  "89": {
+    "class_type": "ImageBatchExtendWithOverlap",
+    "inputs": {
+      "source_images": [
+        "75",
+        0
+      ],
+      "new_images": [
+        "87",
+        0
+      ],
+      "overlap": 39,
+      "overlap_side": "source",
+      "overlap_mode": "linear_blend"
+    }
+  },
+  "92": {
+    "class_type": "TrimAudioDuration",
+    "inputs": {
+      "audio": [
+        "88",
+        0
+      ],
+      "start_index": 1.625,
+      "duration": 512
+    }
+  },
+  "93": {
+    "class_type": "AudioConcat",
+    "inputs": {
+      "audio1": [
+        "71",
+        0
+      ],
+      "audio2": [
+        "92",
+        0
+      ],
+      "direction": "after"
+    }
+  },
+  "80": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "89",
+        2
+      ],
+      "audio": [
+        "93",
+        0
+      ],
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "video/fashion_streetwear_10s",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "bitrate": 30,
+      "megabit": true,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true
+    }
+  },
+  "96": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "87",
+        0
+      ],
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "video/debug_fashion_seg2",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "bitrate": 10,
+      "megabit": true,
+      "save_metadata": false,
+      "pingpong": false,
+      "save_output": true
+    }
+  }
+}

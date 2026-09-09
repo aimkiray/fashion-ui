@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Runtime Storage & Outputs
+storage/
+*.log
+
+# OS & IDE Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
