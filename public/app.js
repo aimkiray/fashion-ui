@@ -1049,11 +1049,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function resizeAllInspectorTextareas() {
     if (!promptInspectorDetails || !promptInspectorDetails.open) return;
-    requestAnimationFrame(() => {
+    const runResize = () => {
       adjustTextareaHeight(inspectorKreaPrompt);
       adjustTextareaHeight(inspectorSeg1Prompt);
       adjustTextareaHeight(inspectorSeg2Prompt);
-    });
+    };
+    requestAnimationFrame(runResize);
+    setTimeout(runResize, 50);
   }
 
   function queueRefreshPromptInspector() {

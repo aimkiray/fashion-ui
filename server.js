@@ -184,11 +184,6 @@ function styledSubject(gender, style, femaleBase, maleBase, customStylePrompt = 
   return `${base} ${modifier}`;
 }
 
-// Realistic Anti-AI prompt tokens (neutralize plastic skin, mannequin look, artificial sheen, stiff pose, mirror floor, phantom trains)
-const KREA_NEGATIVE_PROMPT_BASE = 'plastic skin, waxy skin, airbrushed, mannequin, 3d render, cgi, over-smoothed skin, doll, ceramic skin, beauty filter, oversaturated, wax figure, artificial sheen, illustration, cartoon, stiff pose, mannequin pose, rigid pose, a-pose, t-pose, mirror floor reflection, glossy mirror floor, floating feet, hovering feet, cape, train, dress train, gown train, long train, trailing fabric, trailing skirt, phantom cape, exaggerated bustle, floor-length train, hands in pockets, hands tucked into pockets, hands in pants pockets, hands in jacket pockets, hand in pocket, thumb in pocket, thumbs hooked in pockets, hands tucked in waistband, hand on hip, hands on waist, hidden fingers, hidden hands, hands behind back, missing hands, missing fingers, extra fingers, deformed hands, mutated hands, bad hands, fused fingers, open mouth, teeth, toothy smile, grinning, smiling with teeth, laughing, parted lips, creepy smile, exaggerated facial expression, grimace, cropped feet, cut off feet, cut off shoes, cut off legs, cropped legs, half body, torso only, close-up, cropped head, out of frame, blurry, low quality, distorted clothing, extra limbs, bad anatomy, deformed, duplicate person, watermark, text, signature';
-
-const KREA_NEGATIVE_PROMPT_MODEL_ID = 'plastic skin, waxy skin, airbrushed, mannequin, 3d render, cgi, over-smoothed skin, doll, ceramic skin, beauty filter, oversaturated, wax figure, artificial sheen, illustration, cartoon, stiff pose, mannequin pose, rigid pose, a-pose, t-pose, mirror floor reflection, glossy mirror floor, floating feet, hovering feet, cape, train, dress train, gown train, long train, trailing fabric, trailing skirt, phantom cape, exaggerated bustle, floor-length train, hands in pockets, hands tucked into pockets, hands in pants pockets, hands in jacket pockets, hand in pocket, thumb in pocket, thumbs hooked in pockets, hands tucked in waistband, hand on hip, hands on waist, hidden fingers, hidden hands, hands behind back, missing hands, missing fingers, extra fingers, deformed hands, mutated hands, bad hands, fused fingers, face change, different face, unrecognizable face, distorted face, changed hairstyle, deformed facial features, bad face, open mouth, teeth, toothy smile, grinning, smiling with teeth, laughing, parted lips, creepy smile, exaggerated facial expression, cropped feet, cut off feet, cut off shoes, cut off legs, cropped legs, half body, torso only, out of frame, blurry, low quality, distorted clothing, extra limbs, bad anatomy, deformed, duplicate person, watermark, text, signature';
-
 const SCENES = {
   street: {
     id: 'street',
@@ -1051,12 +1046,16 @@ async function runGenerationJob(taskId) {
     if (kreaWf['8']) {
       kreaWf['8']['inputs']['ref_boost'] = garmentRefBoost;
     }
+    // 640-768px is the LoRA's in-distribution band (trained with 384-768 jitter)
     if (kreaWf['9']) {
-      kreaWf['9']['inputs']['grounding_px'] = 1024;
+      kreaWf['9']['inputs']['grounding_px'] = 768;
     }
+    // Training-matched unconditional for the grounded negative: empty prompt +
+    // same image (krea2edit author's recipe). At cfg=1.0 the sampler drops the
+    // negative entirely (comfy cfg1 optimization), so a token list was dead weight.
     if (kreaWf['10']) {
-      kreaWf['10']['inputs']['prompt'] = KREA_NEGATIVE_PROMPT_BASE;
-      kreaWf['10']['inputs']['grounding_px'] = 1024;
+      kreaWf['10']['inputs']['prompt'] = '';
+      kreaWf['10']['inputs']['grounding_px'] = 768;
     }
     // Slightly raise step count for dpmpp_2m to get gentler gradients on skin/fabrics.
     if (kreaWf['11']) {
@@ -1115,8 +1114,6 @@ async function runGenerationJob(taskId) {
         kreaWf['9']['inputs']['image_b'] = ['20', 0];
         if (kreaWf['10']) {
           kreaWf['10']['inputs']['image_b'] = ['20', 0];
-          kreaWf['10']['inputs']['prompt'] = KREA_NEGATIVE_PROMPT_MODEL_ID;
-          kreaWf['10']['inputs']['grounding_px'] = 1024;
         }
 
         kreaWf['9']['inputs']['prompt'] = finalKreaPrompt;
@@ -1146,8 +1143,6 @@ async function runGenerationJob(taskId) {
         kreaWf['9']['inputs']['image_b'] = ['20', 0];
         if (kreaWf['10']) {
           kreaWf['10']['inputs']['image_b'] = ['20', 0];
-          kreaWf['10']['inputs']['prompt'] = KREA_NEGATIVE_PROMPT_BASE;
-          kreaWf['10']['inputs']['grounding_px'] = 1024;
         }
 
         kreaWf['9']['inputs']['prompt'] = finalKreaPrompt;
