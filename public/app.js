@@ -119,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const STORAGE_KEY = 'fashion_ui_user_options_v2';
   const ACTIVE_TASK_KEY = 'fashion_ui_active_task';
   const ACTIVE_BATCH_KEY = 'fashion_ui_active_batch';
-  const STYLE_PROMPTS_KEY = 'fashion_ui_style_prompts_v2';
+  const STYLE_PROMPTS_KEY = 'fashion_ui_style_prompts_v3';
   const IDB_NAME = 'fashion_ui_storage_v2';
   const STORE_GARMENT = 'uploaded_garment';
   const STORE_MODEL = 'uploaded_model';
@@ -128,18 +128,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // Default Model Style Prompts
   const DEFAULT_STYLE_PROMPTS = {
     female: {
-      classic: 'with high-fashion editorial elegance, chiseled serene facial features, calm composed gaze, mouth closed, softly closed lips, and regal lookbook posture',
-      sweet: 'with clean youthful aesthetic, gentle refined facial features, tranquil poise, mouth closed, softly closed lips, and tender natural gaze',
-      athletic: 'with healthy athletic glow, tone-defined posture, calm focused expression, mouth closed, closed lips, and confident grounded stance',
-      mature: 'with sophisticated executive poise, graceful mature facial structure, mouth closed, closed lips, and commanding serene lookbook presence',
-      cool: 'with modern androgynous edge, chic understated attitude, sharp bone structure, mouth closed, closed lips, and effortless lookbook posture'
+      classic: 'with high-fashion editorial elegance, chiseled serene facial features, calm composed gaze, naturally closed lips without tension, relaxed natural jawline, and effortless lookbook poise',
+      sweet: 'with clean youthful aesthetic, gentle refined facial features, tranquil poise, naturally closed lips without tension, relaxed natural jawline, and tender serene gaze',
+      athletic: 'with healthy athletic glow, tone-defined posture, calm focused expression, naturally closed lips without tension, relaxed natural jawline, and confident grounded stance',
+      mature: 'with sophisticated executive poise, graceful mature facial structure, naturally closed lips without tension, relaxed natural jawline, and commanding serene presence',
+      cool: 'with modern androgynous edge, chic understated attitude, sharp bone structure, naturally closed lips without tension, relaxed natural jawline, and effortless lookbook poise'
     },
     male: {
-      classic: 'with sharp defined jawline, European high-fashion charisma, calm composed gaze, mouth closed, closed lips, and natural upright posture',
-      sweet: 'with clean youthful Korean lookbook charm, refined gentle features, relaxed natural poise, mouth closed, closed lips, and subtle serene gaze',
-      athletic: 'with athletic toned build, sharp defined facial structure, calm focused gaze, mouth closed, closed lips, and upright confident stance',
-      mature: 'with distinguished mature charisma, sharp masculine features, mouth closed, closed lips, and commanding executive posture',
-      cool: 'with contemporary streetwear edge, cool understated attitude, sharp jawline, mouth closed, closed lips, and effortless confident posture'
+      classic: 'with sharp defined jawline, European high-fashion charisma, calm composed gaze, naturally closed lips without tension, relaxed jawline, and natural confident posture',
+      sweet: 'with clean youthful Korean lookbook charm, refined gentle features, relaxed natural poise, naturally closed lips without tension, and subtle calm gaze',
+      athletic: 'with athletic toned build, sharp defined facial structure, calm focused gaze, naturally closed lips without tension, and upright confident stance',
+      mature: 'with distinguished mature charisma, sharp masculine features, naturally closed lips without tension, and commanding executive posture',
+      cool: 'with contemporary streetwear edge, cool understated attitude, sharp jawline, naturally closed lips without tension, and effortless confident posture'
     }
   };
 
