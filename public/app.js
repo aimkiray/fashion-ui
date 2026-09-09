@@ -521,7 +521,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateBatchHint() {
-    const batchHintEl = document.querySelector('.batch-hint');
     const batchScenes = getBatchScenesFor(selectedScene);
     const sceneNames = batchScenes.map(id => BATCH_SCENE_LABELS[id] || id);
     const scenesText = `【${sceneNames.join('、')}】`;
@@ -529,9 +528,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const isStillOnly = genMode === 'still_only';
     const modeText = isStillOnly ? '定妆照' : '视频';
 
-    if (batchHintEl) {
-      batchHintEl.textContent = `批量生成：系统自动选取${scenesText}排队生成 3 套场景${modeText}，方便高效出片`;
-    }
     if (btnGenerateBatch) {
       btnGenerateBatch.title = `自动排队顺序生成${scenesText} 3 套${modeText}`;
       btnGenerateBatch.innerHTML = `<i class="ph ph-lightning"></i> 一键批量生成 3 套${isStillOnly ? '定妆照' : '场景视频'}`;
