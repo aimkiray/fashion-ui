@@ -184,6 +184,422 @@ function styledSubject(gender, style, femaleBase, maleBase, customStylePrompt = 
   return `${base} ${modifier}`;
 }
 
+// ---- H3 视频提示词骨架与场景配置 ----
+// 从生活感样例提炼的结构规律（非逐字套用）：
+//   身份锁定 → 秒级时间轴节拍 → 表情纪律（顺序分解+允许真实不完美+禁止项）
+//   → 真实人体动态（惯性/缓急）→ 服装与手部连续性 → 镜头纪律
+//   → 画面质感 → 去AI味黑名单 → 最终效果 → 音频。
+// 场景差异只写进 H3_SCENE_CFG，骨架统一维护。
+const H3_SCENE_CFG = {
+  street: {
+    title: '阳光都市街拍',
+    lock: '服装与鞋履细节、街边建筑背景、自然日光、构图、镜头焦段和整体摄影质感',
+    shot: '街拍摄影师跟拍',
+    seg1: {
+      beats: `0.00－1.50秒
+模特从首帧的站姿自然起步，沿洒满阳光的人行道迎面走向镜头。
+起步自然：重心先微微前移，第一步不要突然迈大。
+她保持放松从容的状态，肩背舒展，眼神柔和地看向镜头。
+
+1.50－3.80秒
+她以稳定的节奏继续向前走，每秒约一步。
+不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
+双臂在身体两侧自然摆动，手臂摆动与步伐自然交替。
+鞋底稳稳踩实地面，每一步都有真实的落地与推进。
+
+3.80－5.00秒
+她走到离镜头较近的位置，微微放慢脚步，保持与镜头的柔和对视，全身始终完整在画面中。
+不是突然停住，也不是机械匀速，接近镜头时动作自然减速。`,
+      eye: '与镜头保持自然对视，头部带一点轻松的四分之三角度，眼神明亮而柔和。',
+      camera: '与模特视线等高的稳定后撤跟拍：镜头随模特同步平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要环绕，不要突然变焦。\n焦点稳定在模特的脸部和服装上，背景呈现真实柔和的街景虚化。\n不要焦点乱跳。',
+      recap: '她迎面自然走来，步伐真实有惯性，眼神与镜头自然交流，服装与街景与首帧完全一致，像真实街拍摄影师随手记录的一段生活瞬间。',
+      audio: '远处隐约的城市街道环境音，清晰有节奏的脚步声，衣物面料随步伐的轻微摆动声。'
+    },
+    seg2: {
+      beats: `0.00－1.50秒
+承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地踩实。
+停步不是急刹车，而是像真实走秀结束那样带着惯性缓缓收住。
+
+1.50－3.20秒
+她以重心脚为轴，自然连贯地完成一个约45度的转身。
+转身时肩膀、腰部、腿部协同运动，重心转移真实，不要像机器人一样只旋转上半身。
+
+3.20－5.00秒
+转身后她稳定站定，展示服装的侧面与背面剪裁、面料垂感与缝线细节，随后自然回头看镜头，与镜头保持从容对视。`,
+      eye: '转身站定后回头看镜头，眼神自然先有注视，再带出一点柔和的笑意，不要突然切换表情。',
+      camera: '稳定的慢速横移：镜头以平稳慢速的横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦，不要环绕。\n焦点始终稳定在模特身上。',
+      recap: '她平稳停步、自然完成45度转身，服装细节清晰稳定，随后回头与镜头从容对视，整个动作一气呵成、真实自然。',
+      audio: '连续的城市街道环境音，鞋底在人行道上的轻轻转身摩擦声，衣物随转身的轻微摆动声。'
+    }
+  },
+  studio: {
+    title: '极简纯色影棚',
+    lock: '服装与鞋履细节、纯色无影墙背景、柔光箱光线、构图、镜头焦段和整体摄影质感',
+    shot: '影棚摄影师掌机记录',
+    seg1: {
+      beats: `0.00－1.50秒
+模特从首帧的站姿自然起步，在影棚地面上迎面走向镜头。
+起步自然：重心先微微前移，第一步不要突然迈大。
+她保持放松从容的状态，肩背舒展，下颌微微收低，眼神柔和地抬起看向镜头。
+
+1.50－3.80秒
+她以稳定的节奏继续向前走，每秒约一步，步幅从容优雅。
+不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
+双臂在身体两侧自然摆动，手臂摆动与步伐自然交替。
+
+3.80－5.00秒
+她走到离镜头较近的位置，微微放慢脚步，保持安静亲切的对视，全身始终完整在画面中。
+接近镜头时动作自然减速，不要突然停住。`,
+      eye: '下颌微微收低，眼神轻轻抬起与镜头对视，安静、亲切、有张力。',
+      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，无影墙背景保持干净一致的柔光。',
+      recap: '她在纯色影棚中迎面自然走来，步伐真实有惯性，安静亲切的眼神与镜头交流，服装与影棚背景与首帧完全一致。',
+      audio: '安静的影棚房间底噪，轻柔有节奏的脚步声，衣料随步伐的细微摩擦声。'
+    },
+    seg2: {
+      beats: `0.00－1.50秒
+承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地。
+停步带着真实惯性，缓缓收住。
+
+1.50－3.20秒
+她以重心脚为轴，自然连贯地完成一个约45度的转身，展示服装的侧面剪裁、领口结构与背面做工。
+转身时肩、腰、腿协同运动，重心转移真实。
+
+3.20－5.00秒
+转身后她稳定站定，展示面料垂感与缝线细节，随后抬眼回看镜头，保持安静从容的对视。`,
+      eye: '转身站定后抬眼回看镜头，眼神安静从容，先有注视，再带一点柔和笑意。',
+      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
+      recap: '她平稳停步、自然转身展示服装侧面与背面细节，随后抬眼与镜头从容对视，整个动作一气呵成。',
+      audio: '安静的影棚房间底噪，鞋底轻轻的转身摩擦声，衣料随转身的细微摆动声。'
+    }
+  },
+  office: {
+    title: '摩天楼职场通勤',
+    lock: '服装与鞋履细节、现代玻璃幕墙大堂背景、晨光、构图、镜头焦段和整体摄影质感',
+    shot: '写字楼大堂内的跟拍',
+    seg1: {
+      beats: `0.00－1.50秒
+模特从首帧的站姿自然起步，在大堂光洁的石面地面上迎面走向镜头。
+起步自然：重心先微微前移，第一步不要突然迈大。
+她保持干练从容的状态，肩背舒展，眼神以三分之二角度与镜头自然交流。
+
+1.50－3.80秒
+她以稳定的节奏继续向前走，每秒约一步，步幅干练利落。
+不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
+双臂在身体两侧自然摆动，与步伐自然交替。
+
+3.80－5.00秒
+她走到离镜头较近的位置，微微放慢脚步，保持从容对视，全身始终完整在画面中。
+接近镜头时动作自然减速，不要突然停住。`,
+      eye: '以三分之二角度与镜头自然对视，眼神从容、自信、有职业感。',
+      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，玻璃幕墙晨光背景保持一致。',
+      recap: '她在晨光大堂中迎面自然走来，步伐真实有惯性，从容自信的眼神与镜头交流，服装与大堂背景与首帧完全一致。',
+      audio: '开阔的大堂空间环境音，轻微的声学混响，石面地面上清晰有节奏的脚步声。'
+    },
+    seg2: {
+      beats: `0.00－1.50秒
+承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地。
+停步带着真实惯性，缓缓收住。
+
+1.50－3.20秒
+她以重心脚为轴，自然连贯地完成一个约45度的转身，展示套装的侧面剪裁、面料垂感与背面做工。
+转身时肩、腰、腿协同运动，重心转移真实。
+
+3.20－5.00秒
+转身后她稳定站定，展示服装细节，随后以三分之二角度回看镜头，保持从容自信的对视。`,
+      eye: '转身站定后以三分之二角度回看镜头，眼神从容自信，先有注视，再带一点柔和暖意。',
+      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出套装面料与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
+      recap: '她平稳停步、自然转身展示套装细节，随后回看镜头从容对视，整个动作干练流畅、真实自然。',
+      audio: '安静通透的大堂氛围音，鞋底轻轻的转身摩擦声，衣物随转身的轻微摆动声。'
+    }
+  },
+  boutique: {
+    title: '高端艺术买手店',
+    lock: '服装与鞋履细节、大理石与黄铜买手店背景、暖色射灯光线、构图、镜头焦段和整体摄影质感',
+    shot: '买手店内的跟拍',
+    seg1: {
+      beats: `0.00－1.50秒
+模特从首帧的站姿自然起步，在大理石地面上迎面走向镜头。
+起步自然：重心先微微前移，第一步不要突然迈大。
+她保持优雅从容的状态，肩背舒展，眼神微微上扬看向镜头。
+
+1.50－3.80秒
+她以稳定的节奏继续向前走，每秒约一步，步幅优雅轻盈。
+不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
+双臂在身体两侧自然摆动，与步伐自然交替。
+
+3.80－5.00秒
+她走到离镜头较近的位置，微微放慢脚步，保持柔和的对视，全身始终完整在画面中。
+接近镜头时动作自然减速，不要突然停住。`,
+      eye: '眼神微微上扬，接住暖色射灯的反光，与镜头保持柔和明亮的对视。',
+      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，射灯暖光在面料上的反光保持一致。',
+      recap: '她在买手店暖光中迎面自然走来，步伐真实有惯性，柔和明亮的眼神与镜头交流，服装与店铺背景与首帧完全一致。',
+      audio: '安静的精品店室内环境音，轻微的声学混响，鞋跟在大理石地面上清晰轻快的节奏声。'
+    },
+    seg2: {
+      beats: `0.00－1.50秒
+承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地。
+停步带着真实惯性，缓缓收住。
+
+1.50－3.20秒
+她以重心脚为轴，自然连贯地完成一个约45度的转身，展示服装的侧面剪裁、面料质感与背面做工。
+转身时肩、腰、腿协同运动，重心转移真实。
+
+3.20－5.00秒
+转身后她稳定站定，展示面料与缝线细节，随后眼神微微上扬回看镜头，保持柔和明亮的对视。`,
+      eye: '转身站定后回看镜头，眼神微微上扬接住射灯反光，柔和明亮，先有注视，再带一点轻盈笑意。',
+      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出面料质感与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
+      recap: '她平稳停步、自然转身展示服装细节，随后上扬眼神与镜头柔和对视，整个动作优雅流畅。',
+      audio: '安静的精品店室内氛围音，鞋跟在大理石上的轻轻转身声，衣料随转身的细微摆动声。'
+    }
+  },
+  outdoor: {
+    title: '自然户外林荫',
+    lock: '服装与鞋履细节、花园石板路背景、树荫光斑、构图、镜头焦段和整体摄影质感',
+    shot: '花园里的跟拍',
+    seg1: {
+      beats: `0.00－1.50秒
+模特从首帧的站姿自然起步，沿着石板小径迎面走向镜头。
+起步自然：重心先微微前移，第一步不要突然迈大。
+她保持松弛自然的状态，肩背舒展，行走中自然回头看镜头。
+
+1.50－3.80秒
+她以放松的节奏继续向前走，每秒约一步，步态轻盈自然。
+不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
+双臂在身体两侧自然摆动，微风吹动发丝和衣摆，动作与环境真实呼应。
+
+3.80－5.00秒
+她走到离镜头较近的位置，微微放慢脚步，保持回眸式的柔和对视，全身始终完整在画面中。
+接近镜头时动作自然减速，不要突然停住。`,
+      eye: '行走中自然回眸看镜头，眼神柔和明亮，像在花园里被熟悉的人轻轻叫住。',
+      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，树荫光斑自然流动但不抢焦点。',
+      recap: '她沿石板小径迎面自然走来，步伐轻盈真实，回眸眼神柔和明亮，服装与花园背景与首帧完全一致。',
+      audio: '户外微风拂过树叶的沙沙声，远处隐约的鸟鸣，石板路上轻快的脚步声，衣物随微风的轻微摆动声。'
+    },
+    seg2: {
+      beats: `0.00－1.50秒
+承接上一镜的行走，模特自然放慢脚步，在盛开花草旁平稳停下，双脚稳稳落地。
+停步带着真实惯性，缓缓收住。
+
+1.50－3.20秒
+她以重心脚为轴，自然连贯地完成一个约45度的转身，展示服装的侧面剪裁、面料垂感与背面做工。
+转身时肩、腰、腿协同运动，重心转移真实。
+
+3.20－5.00秒
+转身后她稳定站定，展示面料与剪裁细节，随后自然回眸看镜头，保持柔和明亮的对视。`,
+      eye: '转身站定后回眸看镜头，眼神柔和明亮，先有注视，再带一点自然笑意。',
+      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
+      recap: '她在花草旁平稳停步、自然转身展示服装细节，随后回眸与镜头柔和对视，整个动作松弛自然。',
+      audio: '连续的花园鸟鸣与风声，石板上的轻轻转身声，衣物随微风与转身的轻微摆动声。'
+    }
+  },
+  cafe: {
+    title: '现代极简咖啡厅',
+    lock: '服装与鞋履细节、咖啡馆木质背景与落地窗、自然暖光、构图、镜头焦段和整体摄影质感',
+    shot: '咖啡馆里的跟拍',
+    seg1: {
+      beats: `0.00－1.50秒
+模特从首帧的站姿自然起步，在木地板上迎面走向镜头。
+起步自然：重心先微微前移，第一步不要突然迈大。
+她保持慵懒放松的状态，肩背舒展，下颌微微抬起、头部四分之三转向镜头。
+
+1.50－3.80秒
+她以放松的节奏继续向前走，每秒约一步，步态松弛自然。
+不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
+双臂在身体两侧自然摆动，与步伐自然交替。
+
+3.80－5.00秒
+她走到离镜头较近的位置，微微放慢脚步，保持温暖亲近的对视，全身始终完整在画面中。
+接近镜头时动作自然减速，不要突然停住。`,
+      eye: '下颌微微抬起，头部四分之三转向镜头，眼神温暖、亲近、有生活感。',
+      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，落地窗暖光保持一致。',
+      recap: '她在咖啡馆暖光中迎面自然走来，步伐松弛真实，温暖的眼神与镜头交流，服装与咖啡馆背景与首帧完全一致。',
+      audio: '咖啡馆远处轻微的人声底噪，隐约的咖啡机蒸汽声，木地板上轻柔的脚步声。'
+    },
+    seg2: {
+      beats: `0.00－1.50秒
+承接上一镜的行走，模特自然放慢脚步，在落地窗边平稳停下，双脚稳稳落地。
+停步带着真实惯性，缓缓收住。
+
+1.50－3.20秒
+她以重心脚为轴，自然连贯地完成一个约45度的转身，展示服装的侧面剪裁、针织面料质感与背面做工。
+转身时肩、腰、腿协同运动，重心转移真实。
+
+3.20－5.00秒
+转身后她稳定站定，展示面料与缝线细节，随后下颌微抬回看镜头，保持温暖亲近的对视。`,
+      eye: '转身站定后回看镜头，下颌微微抬起，眼神温暖亲近，先有注视，再带一点自然笑意。',
+      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出针织面料与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
+      recap: '她在窗边平稳停步、自然转身展示服装细节，随后回看镜头温暖对视，整个动作松弛自然。',
+      audio: '咖啡馆安静的房间氛围音，木地板上的轻轻转身声，衣物随转身的细微摆动声。'
+    }
+  },
+  custom: {
+    title: '自定义专属场景',
+    lock: '服装与鞋履细节、背景环境与光线氛围、构图、镜头焦段和整体摄影质感',
+    shot: '生活场景跟拍',
+    seg1: {
+      beats: `0.00－1.50秒
+模特从首帧的站姿自然起步，在首帧场景中迎面走向镜头。
+起步自然：重心先微微前移，第一步不要突然迈大。
+她保持放松从容的状态，肩背舒展，眼神柔和地看向镜头。
+
+1.50－3.80秒
+她以稳定的节奏继续向前走，每秒约一步。
+不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
+双臂在身体两侧自然摆动，动作与首帧场景环境真实呼应。
+
+3.80－5.00秒
+她走到离镜头较近的位置，微微放慢脚步，保持自然柔和的对视，全身始终完整在画面中。
+接近镜头时动作自然减速，不要突然停住。`,
+      eye: '与镜头自然对视，眼神温暖真实、放松而有生气。',
+      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，场景光线保持与首帧一致。',
+      recap: '她迎面自然走来，步伐真实有惯性，眼神与镜头自然交流，服装与场景与首帧完全一致。',
+      audio: '与场景匹配的真实环境底噪，有节奏的脚步声，衣物随步伐的轻微摩擦声。'
+    },
+    seg2: {
+      beats: `0.00－1.50秒
+承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地。
+停步带着真实惯性，缓缓收住。
+
+1.50－3.20秒
+她以重心脚为轴，自然连贯地完成一个约45度的转身，展示服装的侧面剪裁、面料垂感与背面做工。
+转身时肩、腰、腿协同运动，重心转移真实。
+
+3.20－5.00秒
+转身后她稳定站定，展示面料与剪裁细节，随后自然回看镜头，保持从容的对视。`,
+      eye: '转身站定后回看镜头，眼神从容真实，先有注视，再带一点自然笑意。',
+      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
+      recap: '她平稳停步、自然转身展示服装细节，随后回看镜头从容对视，整个动作一气呵成。',
+      audio: '与场景匹配的连续环境音，轻轻的转身脚步声，衣物随转身的轻微摆动声。'
+    }
+  }
+};
+
+// 按【最高优先级】→【5秒核心动作】→【表情与眼神】→【真实人体动态】
+// →【服装与手部】→【镜头】→【画面质感】→【严格去除AI味】→【最终效果】→【音频】
+// 组装场景视频提示词；她/他在此处按性别替换。
+function h3SegPrompt(sceneId, seg, isM, extra = '') {
+  const cfg = H3_SCENE_CFG[sceneId] || H3_SCENE_CFG.custom;
+  const s = cfg['seg' + seg];
+  const pro = isM ? '他' : '她';
+  const segTitle = seg === 1 ? '分镜一·迎面走姿' : '分镜二·45°转体展示';
+  const body = seg === 1
+    ? '身体重心随步伐自然前移；\n每一步都有真实的落地与惯性；'
+    : '停步时身体带着惯性缓缓收住；\n转身时重心转移自然连贯；';
+  const hand = seg === 1
+    ? '双臂在身体两侧自然摆动，双手放松、手指自然张开，全程可见；'
+    : '双臂自然垂于身体两侧，双手放松、全程可见；';
+  const beats = s.beats.split('她').join(pro);
+  const eye = s.eye.split('她').join(pro);
+  const camera = s.camera.split('她').join(pro);
+  const recap = s.recap.split('她').join(pro);
+  let p = `生成一段5秒、真人写实、自然生活感时尚短视频，适用于 Minimax H3 首帧续写。${cfg.title}·${segTitle}。
+
+【最高优先级】
+严格保持首帧画面中模特的人脸、五官、发型、妆容、肤色、身材比例、${cfg.lock}不变。
+不要换脸，不要改变人物造型，不要改变服装款式与配色，不要改变场景。
+整段视频必须像真实${cfg.shot}记录下的一段生活瞬间：
+自然、松弛、有编辑感、有生命感。
+不要刻意表演，不要短视频模板感，严格去掉AI味。
+
+━━━━━━━━━━━━━━━━━━
+【5秒核心动作】
+${beats}
+
+━━━━━━━━━━━━━━━━━━
+【表情与眼神｜必须执行】
+眼神变化遵循真实顺序：
+与镜头对视时，眼神先有细微的亮意，
+→ 面部肌肉保持放松，
+→ 形成从容、安静、亲切的神态。
+${eye}
+允许自然眨眼1次左右，
+允许非常细微的眼球移动和呼吸感。
+这些真实的不完美要保留。
+
+禁止：
+假表情、
+僵硬脸、
+突然咧嘴、
+过度露齿、
+空洞眼神、
+夸张眯眼、
+标准网红笑。
+模特全程自然闭唇、嘴角放松，不要张嘴，不要露齿笑。
+
+━━━━━━━━━━━━━━━━━━
+【真实人体动态】
+整个5秒不能像一张静态图片在动。
+保留非常轻微的真实人体运动：
+自然呼吸；
+肩颈细微起伏；
+${body}
+眼睛有真实注视变化；
+允许自然眨眼；
+几缕碎发有极轻微晃动。
+所有动作必须有真实惯性和缓急变化。
+不要匀速，不要突然启动，不要突然停止，不要机械。
+
+━━━━━━━━━━━━━━━━━━
+【服装与手部】
+服装全程保持首帧中的款式、配色、剪裁与缝线细节。
+不要改变服装款式与细节，衣摆、袖口、缝线全程稳定。
+面料随动作有符合物理规律的自然摆动和惯性。
+禁止：服装变形、纹理跳动、凭空出现的拖尾或裙摆、衣服颜色变化。
+手部必须真实：
+五指正常，
+没有多指，
+没有粘连，
+没有穿模，
+手腕自然。
+${hand}
+
+━━━━━━━━━━━━━━━━━━
+【镜头】
+${camera}
+
+━━━━━━━━━━━━━━━━━━
+【画面质感】
+保持首帧真实自然的光线与色调。
+皮肤保留真实皮肤纹理：
+细微毛孔，
+真实肤质，
+柔和面部高光，
+眼睛真实反光，
+真实发丝边缘。
+不要过度磨皮，不要塑料皮肤，不要蜡像脸，不要过度锐化，不要假白，不要HDR感过重。
+
+━━━━━━━━━━━━━━━━━━
+【严格去除AI味】
+禁止出现：
+换脸，
+脸型变化，
+发型变化，
+五官漂移，
+牙齿闪烁，
+嘴巴变形，
+头发融化，
+手指畸形，
+滑步，
+脚步漂浮，
+服装凭空变化，
+背景物体闪烁，
+焦点乱跳，
+突然运镜，
+机械匀速动作，
+商业广告式表演，
+明显AI生成痕迹。
+
+━━━━━━━━━━━━━━━━━━
+【最终效果】
+${recap}
+
+━━━━━━━━━━━━━━━━━━
+【音频】
+${s.audio}`;
+  if (extra) p += `\n\n━━━━━━━━━━━━━━━━━━\n【补充要求】\n${extra}`;
+  return p;
+}
+
 const SCENES = {
   street: {
     id: 'street',
@@ -196,12 +612,11 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian editorial model', 'handsome East Asian editorial model', customStylePrompt);
       const pro = isM ? 'he' : 'she';
-      const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
         krea_prompt: `a ${subj} standing full-length on a sunlit city street sidewalk with historic brownstone buildings, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus, with a soft intimate POV feeling. Direct eye contact with the viewer, head in a gentle three-quarter turn, gaze connecting naturally. Relaxed editorial stance, subtle natural weight shift to one hip, shoulders soft and open, waistline and long legs forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial fashion lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the concrete sidewalk with realistic soft ground contact shadows beneath footwear. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Clean directional summer sunlight casting soft realistic ground shadows, neutral-to-warm daylight, ivory and cream clothing staying true to tone, brick and pavement colors remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering on cheeks, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, f/2.8, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: `A street editorial fashion video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image. Steady eye-level gimbal tracking shot with intimate POV: ${pro} takes slow, measured runway strides forward toward the camera along a sunlit city street sidewalk (1 step per second), shoes maintaining firm traction with natural step-and-plant walking mechanics, zero sliding, arms swaying organically at sides with relaxed open hands. ${pro} maintains soft direct eye contact with a gentle three-quarter head turn, naturally closed lips without tension, and a calm composed expression. Natural fabric and leather drape swaying organically with each step. Clean directional summer daylight, authentic textile details, soft circular background bokeh, stable camera framing, viewer standing close as if in the same quiet moment. Small secondary props only if present${extra}.\n\nAudio: distant muffled city ambience, crisp footsteps on sidewalk, subtle soft rustle of clothing fabric swaying as ${pro} walks.`,
-        seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit slows ${pos} stride, executing a smooth grounded 45-degree exhibition turn to showcase the side silhouette, drape, and rear tailoring of the clothing, feet firmly planted with natural pivot mechanics, glancing back toward the lens with maintained eye contact and naturally closed lips without tension. Steady slow 35mm camera pan capturing leather grain, fabric stitching, garment folds, and clean hemlines. Constant natural sunlight, warm city background bokeh, stable facial features, stable anatomy, intimate POV${extra}.\n\nAudio: continuous city ambient background, soft shoe pivot on pavement, quiet fabric flutter, gentle outdoor breeze.`
+        seg1_prompt: h3SegPrompt('street', 1, isM, custom),
+        seg2_prompt: h3SegPrompt('street', 2, isM, custom)
       };
     }
   },
@@ -216,12 +631,11 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'professional East Asian editorial model', 'handsome East Asian editorial model', customStylePrompt);
       const pro = isM ? 'he' : 'she';
-      const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
         krea_prompt: `a ${subj} standing full-length in a clean minimalist studio against a neutral grey cyclorama backdrop, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Slightly lowered chin with eyes lifted toward the lens, a quiet intimate gaze. Elegant upright posture, body turned a quarter away from camera, shoulders soft and open, waistline forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial catalogue lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the matte studio floor with realistic soft ground contact shadows beneath footwear. Serene composed editorial expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Diffuse softbox studio lighting with soft shadow falloff, clean neutral-to-warm color balance, ivory and cream clothing staying true to tone, grey backdrop remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering on cheeks, natural catchlights in the eyes, tactile cloth texture and seam details. Props stay small and secondary if present. Shot on 50mm lens, subtle organic film grain, soft contact shadows, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: `A studio editorial fashion video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image, situated in a clean minimalist studio against a neutral grey cyclorama backdrop. Smooth motorized camera dolly tracking backward at eye level with intimate POV: ${pro} takes slow, deliberate runway steps forward, shoes maintaining firm traction on the studio floor with natural step-and-plant walking mechanics, zero sliding, arms swaying organically at sides with relaxed open hands, with calm poise and naturally closed lips without tension. ${pro} keeps a slightly lowered chin with eyes lifted, a quiet intimate gaze toward the lens. Clean garment tailoring, natural cloth and leather physics, natural weave texture and subtle film grain, zero shadow pulsing. Diffuse softbox lighting with gentle shadow falloff${extra}.\n\nAudio: dead-quiet soundproof studio room tone, soft rhythmic footsteps on floor, subtle tactile rustle of garment cloth swaying.`,
-        seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit smoothly slows ${pos} cadence and executes an elegant grounded 45-degree exhibition turn, feet firmly planted with natural pivot mechanics, allowing the camera to inspect the side silhouette, collar construction, and rear garment cut, pausing with serene poise and naturally closed lips without tension. ${pro} glances back toward the lens with lifted eyes and a calm intimate expression. Tripod steady framing, softbox light with gentle shadow falloff, authentic catalogue aesthetic, stable facial features, stable anatomy${extra}.\n\nAudio: quiet soundproof studio room tone, soft shoe pivot on floor, quiet whisper of moving garment fabric.`
+        seg1_prompt: h3SegPrompt('studio', 1, isM, custom),
+        seg2_prompt: h3SegPrompt('studio', 2, isM, custom)
       };
     }
   },
@@ -236,12 +650,11 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'chic East Asian business woman', 'refined East Asian businessman', customStylePrompt);
       const pro = isM ? 'he' : 'she';
-      const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
         krea_prompt: `a ${subj} standing full-length in the grand entrance lobby of a modern glass corporate skyscraper with polished granite floors, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Calm three-quarter eye contact with confident professional warmth, head turned just enough to show the jawline. Composed executive stance, posture relaxed but intentional, shoulders soft and open, waistline visible beneath tailored garments, long legs forming clean lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body executive lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the polished granite floor with realistic soft ground contact shadows beneath footwear and subtle diffuse ambient floor sheen. Naturally closed lips without tension, relaxed natural jawline, soft natural hair. Morning architectural sunlight filtering diagonally through high glass curtain walls, clean neutral-to-warm light, granite and glass tones staying faithful, clothing colors remaining true to tone, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile leather grain and fabric drape. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: `An executive lookbook video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image walking forward through the grand entrance lobby of a modern glass corporate skyscraper. Smooth forward tracking shot at eye level with intimate POV: ${pro} walks with confident upright posture, shoes maintaining firm traction with natural step-and-plant walking mechanics, zero sliding, arms swaying organically at sides with relaxed open hands, and a calm composed expression with naturally closed lips without tension. ${pro} maintains calm three-quarter eye contact. Morning sunbeams filtering diagonally through high glass windows, casting clean soft architectural light across the polished granite floor. Crisp garment lines, natural fabric movement, neutral-to-warm color balance${extra}.\n\nAudio: spacious architectural lobby ambiance, subtle acoustic reverberation, crisp confident footsteps echoing gently on granite floor.`,
-        seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit halts smoothly near a granite column overlooking the skyline, executing a grounded 45-degree turn with feet firmly planted to reveal the tailored silhouette, leather grain, back seam construction, and garment drape. ${pro} glances toward the lens with composed confident three-quarter eye contact and naturally closed lips without tension. Steady slow camera glide, constant natural morning illumination, stable facial features, stable anatomy, intimate POV${extra}.\n\nAudio: tranquil glass lobby atmosphere, soft shoe step, quiet fabric motion, distant muted indoor reverberation.`
+        seg1_prompt: h3SegPrompt('office', 1, isM, custom),
+        seg2_prompt: h3SegPrompt('office', 2, isM, custom)
       };
     }
   },
@@ -256,12 +669,11 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'elegant East Asian fashion model', 'confident refined East Asian male model', customStylePrompt);
       const pro = isM ? 'he' : 'she';
-      const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
         krea_prompt: `a ${subj} standing full-length in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Soft upward gaze catching warm spotlight reflections, composed direct eye contact with the viewer. Graceful weight on one leg, torso softly angled, shoulders and waistline forming refined elegant lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body luxury retail lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the polished marble floor with realistic soft ground contact shadows beneath footwear and subtle diffuse floor sheen. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Warm 3200K architectural recessed spotlights with soft falloff, clean neutral-to-warm color balance, marble and brass tones staying faithful, clothing colors remaining true to tone, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and leather grain. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: `A luxury retail lookbook video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures. Smooth camera glide tracking backward at eye level with intimate POV: ${pro} walks gracefully forward, shoes maintaining firm traction with natural step-and-plant walking mechanics, zero sliding, arms swaying organically at sides with relaxed open hands, a calm composed expression and naturally closed lips without tension. ${pro} keeps a soft upward gaze with eyes catching warm spotlight reflections. Warm recessed spotlights gently grazing fabric textures and clean seams. Fluid motion, perfectly locked anatomy, elegant posture${extra}.\n\nAudio: luxurious quiet boutique interior ambiance, subtle acoustic reverberation, crisp rhythmic footsteps clicking gently on polished marble floor, soft silky cloth rustle.`,
-        seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit gently pauses beside a minimalist brass display plinth, executing a grounded 45-degree exhibition turn with feet firmly planted to showcase the garment silhouette, seam tailoring, and textile craftsmanship. Smooth slow camera pan highlighting the neckline, leather grain, fabric weave, and rear cut. ${pro} glances upward toward the lens with composed intimate eye contact and naturally closed lips without tension. Constant warm spotlighting, creamy background bokeh, stable anatomy${extra}.\n\nAudio: warm boutique interior ambiance, gentle soft reverberation, soft shoe pivot on marble, quiet fabric glide.`
+        seg1_prompt: h3SegPrompt('boutique', 1, isM, custom),
+        seg2_prompt: h3SegPrompt('boutique', 2, isM, custom)
       };
     }
   },
@@ -276,12 +688,11 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'natural East Asian fashion model', 'relaxed East Asian male model', customStylePrompt);
       const pro = isM ? 'he' : 'she';
-      const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
         krea_prompt: `a ${subj} standing full-length in a lush sun-dappled botanical garden along a smooth stone paver pathway with blooming foliage, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. A side glance over the shoulder with maintained eye contact, face angle varied and alive. Peaceful relaxed stance beside garden greenery, posture fluid and natural, shoulders soft and open, waistline visible, long legs forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body lifestyle lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the stone pavers with realistic soft ground contact shadows beneath footwear. Serene gentle expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Natural outdoor daylight, soft dappled sunbeam highlights through tree canopies, clean neutral-to-warm color balance, green foliage staying true to tone, stone colors remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile cloth folds and texture. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: `A garden lifestyle fashion lookbook video faithful to the reference image: the identical ${subj} wearing the reference clothing walks forward along a sun-dappled stone path through a lush botanical garden. Steady forward tracking gimbal camera with intimate POV: ${pro} walks at a relaxed natural cadence, shoes maintaining firm traction on the stone pavers with natural step-and-plant walking mechanics, zero sliding, arms swaying organically at sides with relaxed open hands, with a calm serene expression and naturally closed lips without tension. ${pro} glances back over ${pos} shoulder with maintained eye contact. Sunlight filtering through tree canopies creating gentle dappled patterns across the clothing. Natural cloth and leather physics swaying softly in the fresh outdoor breeze${extra}.\n\nAudio: gentle outdoor breeze rustling green tree leaves, peaceful distant birdsong, soft footsteps on stone pavers, subtle cloth rustle.`,
-        seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit pauses beside blooming greenery, executing a grounded 45-degree turn with feet firmly planted to showcase the garment movement, leather grain, fabric drape, and seam tailoring. Serene gentle gaze over the shoulder with maintained eye contact, naturally closed lips without tension, natural directional sunlight filtered through tree canopies creating a soft rim light on ${pos} silhouette and garment edges. Steady camera pan, stable facial features, stable anatomy, intimate POV${extra}.\n\nAudio: continuous tranquil birdsong, gentle outdoor wind gust, soft stone step, crisp fabric flutter in the breeze.`
+        seg1_prompt: h3SegPrompt('outdoor', 1, isM, custom),
+        seg2_prompt: h3SegPrompt('outdoor', 2, isM, custom)
       };
     }
   },
@@ -296,12 +707,11 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian young woman', 'stylish East Asian young man', customStylePrompt);
       const pro = isM ? 'he' : 'she';
-      const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
         krea_prompt: `a ${subj} standing full-length in a cozy Nordic-aesthetic cafe with warm timber oak interiors and large floor-to-ceiling sunlit windows, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Chin softly lifted, head turned three-quarters toward the lens, warm approachable eye contact. Casual editorial stance near the sunlit window, body language relaxed but intentional, shoulders soft and open, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body cozy editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the hardwood floor with realistic soft ground contact shadows beneath footwear. Relaxed serene expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Warm natural window light with soft interior fill, clean neutral-to-warm color balance, warm oak and cream tones staying faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile knit and fabric weave. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: `A cafe lifestyle fashion lookbook video faithful to the reference image: the identical ${subj} wearing the exact outfit walks forward with natural poise in a cozy Nordic-aesthetic cafe near large floor-to-ceiling sunlit windows. Smooth eye-level gimbal tracking shot with intimate POV: ${pro} walks at a relaxed pace, shoes maintaining firm traction on the wood floor with natural step-and-plant walking mechanics, zero sliding, arms swaying organically at sides with relaxed open hands, a calm peaceful expression and naturally closed lips without tension. ${pro} keeps the chin softly lifted, head turned three-quarters toward the lens with warm eye contact. Warm timber tones, soft ambient lighting, natural garment drape swaying gently, neutral-to-warm color balance${extra}.\n\nAudio: quiet ambient cafe murmur in the far background, distant gentle hiss of espresso machine steam, soft footsteps on hardwood timber floor, quiet fabric rustle.`,
-        seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit pauses beside the sunlit window, executing a grounded 45-degree turn with feet firmly planted to reveal the garment silhouette, leather grain, back tailoring, and fabric weave. Smooth camera pan highlighting the collar line, pocket details, and cloth texture. Calm peaceful expression with warm approachable eye contact toward the lens, naturally closed lips without tension, warm daylight, soft progressive background falloff, stable anatomy${extra}.\n\nAudio: gentle cafe room tone, quiet atmospheric background murmur, soft shoe step on wood floor, subtle fabric rustle.`
+        seg1_prompt: h3SegPrompt('cafe', 1, isM, custom),
+        seg2_prompt: h3SegPrompt('cafe', 2, isM, custom)
       };
     }
   },
@@ -316,7 +726,6 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian editorial model', 'handsome East Asian editorial model', customStylePrompt);
       const pro = isM ? 'he' : 'she';
-      const pos = isM ? 'his' : 'her';
       const rawScene = (customScene && customScene.trim()) ? customScene.trim() : 'an aesthetic commercial fashion lookbook background';
       const sceneDesc = /^(in|on|at|against|under|near|along)\s+/i.test(rawScene)
         ? rawScene
@@ -324,8 +733,8 @@ const SCENES = {
       const extra = customPrompt ? `, ${customPrompt}` : '';
       return {
         krea_prompt: `a ${subj} standing full-length ${sceneDesc}, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Soft direct eye contact with a warm genuine presence, face angle natural and alive. Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic natural lighting consistent with the environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: `An editorial lookbook showcase video faithful to the reference image: the ${subj} wearing the identical outfit, situated ${sceneDesc}. Smooth steady gimbal tracking shot at eye level with intimate POV: ${pro} walks forward at a measured natural cadence, shoes maintaining firm traction on the ground with natural step-and-plant walking mechanics, zero sliding, arms swaying organically at sides with relaxed open hands, with calm confidence, soft direct eye contact, and naturally closed lips without tension toward the lens. Fabric drape, leather grain, and textile weave clearly visible, natural organic cloth physics. Realistic natural ambient lighting consistent with the environment, neutral-to-warm color balance${extra}.\n\nAudio: natural atmospheric ambiance matching the acoustic surroundings, subtle rhythmic footsteps, soft fabric rustle as ${pro} moves.`,
-        seg2_prompt: `Continuing seamlessly from the previous shot: the same ${subj} in the identical outfit situated ${sceneDesc} slows ${pos} stride and executes a grounded 45-degree exhibition turn with feet firmly planted to showcase the silhouette, fabric flow, leather grain, and rear tailoring of the clothing, pausing naturally with a calm composed glance toward the lens, soft direct eye contact, naturally closed lips without tension, and serene poise. Steady smooth camera pan revealing fabric weave and flow. Harmonious natural lighting, natural textile details, stable facial features, stable anatomy, intimate POV${extra}.\n\nAudio: continuous atmospheric ambient background, gentle fabric movement sound, subtle environmental breeze.`
+        seg1_prompt: h3SegPrompt('custom', 1, isM, customPrompt),
+        seg2_prompt: h3SegPrompt('custom', 2, isM, customPrompt)
       };
     }
   }
@@ -383,7 +792,7 @@ function computeTaskPrompts({
     kreaPrompt = `Create an editorial lookbook portrait. Transfer the clothing and outfit from the first reference image onto the ${modelGenderLabel} in the second reference image, strictly preserving their exact facial features, facial identity, eye shape, nose shape, and hairstyle, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${isM ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling, standing ${sceneEnv}. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Soft direct eye contact with warm genuine presence, serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic lighting consistent with the environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
   } else if (scene_image) {
     const subj = styledSubject(gender, modelStyleKey, 'stylish female model', 'handsome male model', cleanCustomModelStyle);
-    kreaPrompt = `Create an editorial lookbook portrait of ${subj} standing full-length in the background environment from the first reference image, wearing the exact clothing and outfit from the second reference image, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${isM ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling. Soft direct eye contact with warm genuine presence, face angle natural and alive. Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic illumination matched to the background environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
+    kreaPrompt = `Create an editorial lookbook portrait of a ${subj} standing full-length in the background environment from the first reference image, wearing the exact clothing and outfit from the second reference image, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${isM ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling. Soft direct eye contact with warm genuine presence, face angle natural and alive. Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic illumination matched to the background environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
   }
 
   return {

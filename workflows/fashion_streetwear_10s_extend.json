@@ -68,7 +68,7 @@
       "selection": "Sol-Attn (adaptive tau)",
       "selection.tau": 1.3,
       "start_percent": 0.2,
-      "end_percent": 1.0,
+      "end_percent": 1,
       "dense_blocks": "",
       "min_tokens": 12288,
       "extra_tokens": 256,
@@ -84,7 +84,7 @@
         0
       ],
       "lora_name": "H3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
-      "strength_model": 1.0
+      "strength_model": 1
     }
   },
   "16": {
@@ -94,8 +94,8 @@
         "15",
         0
       ],
-      "shift_video": 6.0,
-      "shift_audio": 3.0
+      "shift_video": 6,
+      "shift_audio": 3
     }
   },
   "20": {
@@ -139,7 +139,7 @@
         "21",
         0
       ],
-      "prompt": "A commercial streetwear lookbook fashion video faithful to the reference image: the stylish young woman wearing the identical outfit, a grey oversized hooded bomber jacket, black crop top, and dark grey baggy denim jeans with cuffed ankles, paired with white sneakers. Full-body tracking shot: she confidently walks forward toward the camera along a sunlit urban city sidewalk. Her hair and jacket hem gently sway with each natural step. Constant natural daylight, authentic fabric texture, realistic cloth physics, steady camera framing. \n\nAudio: gentle city ambient hum, crisp footsteps on asphalt sidewalk, soft rustle of fabric as she walks.",
+      "prompt": "生成一段5秒、真人写实、自然生活感时尚短视频，适用于 Minimax H3 首帧续写。阳光都市街拍·分镜一·迎面走姿。\n\n【最高优先级】\n严格保持首帧画面中模特的人脸、五官、发型、妆容、肤色、身材比例、服装与鞋履细节、街边建筑背景、自然日光、构图、镜头焦段和整体摄影质感不变。\n不要换脸，不要改变人物造型，不要改变服装款式与配色，不要改变场景。\n整段视频必须像真实街拍摄影师跟拍记录下的一段生活瞬间：\n自然、松弛、有编辑感、有生命感。\n不要刻意表演，不要短视频模板感，严格去掉AI味。\n\n━━━━━━━━━━━━━━━━━━\n【5秒核心动作】\n0.00－1.50秒\n模特从首帧的站姿自然起步，沿洒满阳光的人行道迎面走向镜头。\n起步自然：重心先微微前移，第一步不要突然迈大。\n她保持放松从容的状态，肩背舒展，眼神柔和地看向镜头。\n\n1.50－3.80秒\n她以稳定的节奏继续向前走，每秒约一步。\n不要匀速机械行走，步伐之间有非常轻微的自然节奏差。\n双臂在身体两侧自然摆动，手臂摆动与步伐自然交替。\n鞋底稳稳踩实地面，每一步都有真实的落地与推进。\n\n3.80－5.00秒\n她走到离镜头较近的位置，微微放慢脚步，保持与镜头的柔和对视，全身始终完整在画面中。\n不是突然停住，也不是机械匀速，接近镜头时动作自然减速。\n\n━━━━━━━━━━━━━━━━━━\n【表情与眼神｜必须执行】\n眼神变化遵循真实顺序：\n与镜头对视时，眼神先有细微的亮意，\n→ 面部肌肉保持放松，\n→ 形成从容、安静、亲切的神态。\n与镜头保持自然对视，头部带一点轻松的四分之三角度，眼神明亮而柔和。\n允许自然眨眼1次左右，\n允许非常细微的眼球移动和呼吸感。\n这些真实的不完美要保留。\n\n禁止：\n假表情、\n僵硬脸、\n突然咧嘴、\n过度露齿、\n空洞眼神、\n夸张眯眼、\n标准网红笑。\n模特全程自然闭唇、嘴角放松，不要张嘴，不要露齿笑。\n\n━━━━━━━━━━━━━━━━━━\n【真实人体动态】\n整个5秒不能像一张静态图片在动。\n保留非常轻微的真实人体运动：\n自然呼吸；\n肩颈细微起伏；\n身体重心随步伐自然前移；\n每一步都有真实的落地与惯性；\n眼睛有真实注视变化；\n允许自然眨眼；\n几缕碎发有极轻微晃动。\n所有动作必须有真实惯性和缓急变化。\n不要匀速，不要突然启动，不要突然停止，不要机械。\n\n━━━━━━━━━━━━━━━━━━\n【服装与手部】\n服装全程保持首帧中的款式、配色、剪裁与缝线细节。\n不要改变服装款式与细节，衣摆、袖口、缝线全程稳定。\n面料随动作有符合物理规律的自然摆动和惯性。\n禁止：服装变形、纹理跳动、凭空出现的拖尾或裙摆、衣服颜色变化。\n手部必须真实：\n五指正常，\n没有多指，\n没有粘连，\n没有穿模，\n手腕自然。\n双臂在身体两侧自然摆动，双手放松、手指自然张开，全程可见；\n\n━━━━━━━━━━━━━━━━━━\n【镜头】\n与模特视线等高的稳定后撤跟拍：镜头随模特同步平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要环绕，不要突然变焦。\n焦点稳定在模特的脸部和服装上，背景呈现真实柔和的街景虚化。\n不要焦点乱跳。\n\n━━━━━━━━━━━━━━━━━━\n【画面质感】\n保持首帧真实自然的光线与色调。\n皮肤保留真实皮肤纹理：\n细微毛孔，\n真实肤质，\n柔和面部高光，\n眼睛真实反光，\n真实发丝边缘。\n不要过度磨皮，不要塑料皮肤，不要蜡像脸，不要过度锐化，不要假白，不要HDR感过重。\n\n━━━━━━━━━━━━━━━━━━\n【严格去除AI味】\n禁止出现：\n换脸，\n脸型变化，\n发型变化，\n五官漂移，\n牙齿闪烁，\n嘴巴变形，\n头发融化，\n手指畸形，\n滑步，\n脚步漂浮，\n服装凭空变化，\n背景物体闪烁，\n焦点乱跳，\n突然运镜，\n机械匀速动作，\n商业广告式表演，\n明显AI生成痕迹。\n\n━━━━━━━━━━━━━━━━━━\n【最终效果】\n她迎面自然走来，步伐真实有惯性，眼神与镜头自然交流，服装与街景与首帧完全一致，像真实街拍摄影师随手记录的一段生活瞬间。\n\n━━━━━━━━━━━━━━━━━━\n【音频】\n远处隐约的城市街道环境音，清晰有节奏的脚步声，衣物面料随步伐的轻微摆动声。",
       "width": [
         "2",
         0
@@ -179,7 +179,7 @@
       ],
       "scheduler": "simple",
       "steps": 8,
-      "denoise": 1.0
+      "denoise": 1
     }
   },
   "52": {
@@ -255,12 +255,6 @@
       ]
     }
   },
-  "90": {
-    "class_type": "easy int",
-    "inputs": {
-      "value": 39
-    }
-  },
   "76": {
     "class_type": "ComfyMathExpression",
     "inputs": {
@@ -313,6 +307,29 @@
       "duration": 512
     }
   },
+  "80": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "89",
+        2
+      ],
+      "audio": [
+        "93",
+        0
+      ],
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "video/fashion_streetwear_10s",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "bitrate": 30,
+      "megabit": true,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true
+    }
+  },
   "81": {
     "class_type": "MiniMaxH3ImageToVideo",
     "inputs": {
@@ -324,7 +341,7 @@
         "21",
         0
       ],
-      "prompt": "Continuing seamlessly from the previous walk: the same woman in the identical grey oversized jacket and baggy jeans slows her stride, turning her body 45 degrees to showcase the side silhouette and drape of the jacket, then glances back casually toward the camera. Steady slow camera pan capturing the rear cut, pocket stitching and denim folds. Consistent natural sunlight, warm city street background bokeh, stable anatomy. \n\nAudio: continuous street atmosphere, soft fabric movement sound, gentle city breeze.",
+      "prompt": "生成一段5秒、真人写实、自然生活感时尚短视频，适用于 Minimax H3 首帧续写。阳光都市街拍·分镜二·45°转体展示。\n\n【最高优先级】\n严格保持首帧画面中模特的人脸、五官、发型、妆容、肤色、身材比例、服装与鞋履细节、街边建筑背景、自然日光、构图、镜头焦段和整体摄影质感不变。\n不要换脸，不要改变人物造型，不要改变服装款式与配色，不要改变场景。\n整段视频必须像真实街拍摄影师跟拍记录下的一段生活瞬间：\n自然、松弛、有编辑感、有生命感。\n不要刻意表演，不要短视频模板感，严格去掉AI味。\n\n━━━━━━━━━━━━━━━━━━\n【5秒核心动作】\n0.00－1.50秒\n承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地踩实。\n停步不是急刹车，而是像真实走秀结束那样带着惯性缓缓收住。\n\n1.50－3.20秒\n她以重心脚为轴，自然连贯地完成一个约45度的转身。\n转身时肩膀、腰部、腿部协同运动，重心转移真实，不要像机器人一样只旋转上半身。\n\n3.20－5.00秒\n转身后她稳定站定，展示服装的侧面与背面剪裁、面料垂感与缝线细节，随后自然回头看镜头，与镜头保持从容对视。\n\n━━━━━━━━━━━━━━━━━━\n【表情与眼神｜必须执行】\n眼神变化遵循真实顺序：\n与镜头对视时，眼神先有细微的亮意，\n→ 面部肌肉保持放松，\n→ 形成从容、安静、亲切的神态。\n转身站定后回头看镜头，眼神自然先有注视，再带出一点柔和的笑意，不要突然切换表情。\n允许自然眨眼1次左右，\n允许非常细微的眼球移动和呼吸感。\n这些真实的不完美要保留。\n\n禁止：\n假表情、\n僵硬脸、\n突然咧嘴、\n过度露齿、\n空洞眼神、\n夸张眯眼、\n标准网红笑。\n模特全程自然闭唇、嘴角放松，不要张嘴，不要露齿笑。\n\n━━━━━━━━━━━━━━━━━━\n【真实人体动态】\n整个5秒不能像一张静态图片在动。\n保留非常轻微的真实人体运动：\n自然呼吸；\n肩颈细微起伏；\n停步时身体带着惯性缓缓收住；\n转身时重心转移自然连贯；\n眼睛有真实注视变化；\n允许自然眨眼；\n几缕碎发有极轻微晃动。\n所有动作必须有真实惯性和缓急变化。\n不要匀速，不要突然启动，不要突然停止，不要机械。\n\n━━━━━━━━━━━━━━━━━━\n【服装与手部】\n服装全程保持首帧中的款式、配色、剪裁与缝线细节。\n不要改变服装款式与细节，衣摆、袖口、缝线全程稳定。\n面料随动作有符合物理规律的自然摆动和惯性。\n禁止：服装变形、纹理跳动、凭空出现的拖尾或裙摆、衣服颜色变化。\n手部必须真实：\n五指正常，\n没有多指，\n没有粘连，\n没有穿模，\n手腕自然。\n双臂自然垂于身体两侧，双手放松、全程可见；\n\n━━━━━━━━━━━━━━━━━━\n【镜头】\n稳定的慢速横移：镜头以平稳慢速的横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦，不要环绕。\n焦点始终稳定在模特身上。\n\n━━━━━━━━━━━━━━━━━━\n【画面质感】\n保持首帧真实自然的光线与色调。\n皮肤保留真实皮肤纹理：\n细微毛孔，\n真实肤质，\n柔和面部高光，\n眼睛真实反光，\n真实发丝边缘。\n不要过度磨皮，不要塑料皮肤，不要蜡像脸，不要过度锐化，不要假白，不要HDR感过重。\n\n━━━━━━━━━━━━━━━━━━\n【严格去除AI味】\n禁止出现：\n换脸，\n脸型变化，\n发型变化，\n五官漂移，\n牙齿闪烁，\n嘴巴变形，\n头发融化，\n手指畸形，\n滑步，\n脚步漂浮，\n服装凭空变化，\n背景物体闪烁，\n焦点乱跳，\n突然运镜，\n机械匀速动作，\n商业广告式表演，\n明显AI生成痕迹。\n\n━━━━━━━━━━━━━━━━━━\n【最终效果】\n她平稳停步、自然完成45度转身，服装细节清晰稳定，随后回头与镜头从容对视，整个动作一气呵成、真实自然。\n\n━━━━━━━━━━━━━━━━━━\n【音频】\n连续的城市街道环境音，鞋底在人行道上的轻轻转身摩擦声，衣物随转身的轻微摆动声。",
       "width": [
         "2",
         0
@@ -398,7 +415,7 @@
       ],
       "scheduler": "simple",
       "steps": 8,
-      "denoise": 1.0
+      "denoise": 1
     }
   },
   "86": {
@@ -468,6 +485,12 @@
       "overlap_mode": "linear_blend"
     }
   },
+  "90": {
+    "class_type": "easy int",
+    "inputs": {
+      "value": 39
+    }
+  },
   "92": {
     "class_type": "TrimAudioDuration",
     "inputs": {
@@ -491,29 +514,6 @@
         0
       ],
       "direction": "after"
-    }
-  },
-  "80": {
-    "class_type": "VHS_VideoCombine",
-    "inputs": {
-      "images": [
-        "89",
-        2
-      ],
-      "audio": [
-        "93",
-        0
-      ],
-      "frame_rate": 24,
-      "loop_count": 0,
-      "filename_prefix": "video/fashion_streetwear_10s",
-      "format": "video/h264-mp4",
-      "pix_fmt": "yuv420p",
-      "bitrate": 30,
-      "megabit": true,
-      "save_metadata": true,
-      "pingpong": false,
-      "save_output": true
     }
   },
   "96": {

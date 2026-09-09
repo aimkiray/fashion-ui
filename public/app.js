@@ -1164,6 +1164,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Helper: Stop active video/audio playback when starting generation or switching views
+  function stopActiveVideoPlayback() {
+    if (resultVideo) {
+      try {
+        resultVideo.pause();
+        resultVideo.currentTime = 0;
+      } catch (e) {}
+      delete resultVideo.dataset.currentSrc;
+    }
+    document.querySelectorAll('video, audio').forEach(media => {
+      try {
+        media.pause();
+        media.currentTime = 0;
+      } catch (e) {}
+    });
+  }
+
   // 4. Single Generate Execution
   btnGenerate.addEventListener('click', async () => {
     try {
@@ -1176,6 +1193,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       setButtonsDisabled(true);
+      stopActiveVideoPlayback();
 
       // Hide batch nav bar when starting single task
       if (batchNavBar) batchNavBar.style.display = 'none';
@@ -1294,6 +1312,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         setButtonsDisabled(true);
+        stopActiveVideoPlayback();
 
         const batchScenes = getBatchScenesFor(selectedScene);
         const batchSceneNames = batchScenes.map(id => BATCH_SCENE_LABELS[id] || id).join('、');
@@ -1459,10 +1478,11 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadVideoBtn.href = task.videoUrl;
         downloadVideoBtn.download = `fashion_video_10s_${sceneId}.mp4`;
       } else if (!task.videoUrl) {
+        stopActiveVideoPlayback();
         videoBox.style.display = 'none';
-        delete resultVideo.dataset.currentSrc;
       }
     } else {
+      stopActiveVideoPlayback();
       showcaseContent.style.display = 'none';
       showcaseEmpty.style.display = 'block';
       delete resultStillImg.dataset.currentSrc;
@@ -1915,6 +1935,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           } else {
             // Still image item
+            stopActiveVideoPlayback();
             videoBox.style.display = 'none';
             resultStillImg.src = item.url;
             downloadStillBtn.href = item.url;
@@ -1943,6 +1964,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (batch.status === 'queued' || batch.status === 'running') {
               activeBatchId = batchId;
               setButtonsDisabled(true);
+              stopActiveVideoPlayback();
               progressCard.style.display = 'block';
               if (progressCardTitle) progressCardTitle.textContent = '⚡ 批量 3 套场景生成进度';
               const scenes = batch.tasks && batch.tasks.length > 0
@@ -1988,6 +2010,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (task.status === 'queued' || task.status === 'running') {
         currentTaskId = taskId;
         setButtonsDisabled(true);
+        stopActiveVideoPlayback();
         progressCard.style.display = 'block';
         if (progressCardTitle) progressCardTitle.textContent = '单套场景生成进度';
         progressBar.style.width = `${task.progress}%`;
