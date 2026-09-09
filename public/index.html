@@ -232,44 +232,58 @@
             </div>
           </div>
 
-          <!-- Custom Prompt Input -->
-          <div class="option-group">
-            <label for="customPrompt">个性化要求（自由输入）</label>
-            <textarea
-              id="customPrompt"
-              class="textarea-custom"
-              rows="5"
-              placeholder="请输入个性化定制英文提示词（支持多行），例如：
+          <!-- Custom Prompt Input (Collapsible, Default Folded) -->
+          <div class="option-group custom-prompt-group">
+            <details class="custom-prompt-details" id="customPromptDetails">
+              <summary class="custom-prompt-summary">
+                <div class="summary-left">
+                  <i class="ph ph-sliders"></i>
+                  <span class="summary-title">个性化要求（自由输入）</span>
+                  <span class="custom-prompt-badge" id="customPromptBadge" style="display: none;">已填写</span>
+                </div>
+                <div class="summary-right">
+                  <span class="summary-hint">选填</span>
+                  <i class="ph ph-caret-down summary-caret"></i>
+                </div>
+              </summary>
+              <div class="custom-prompt-body">
+                <textarea
+                  id="customPrompt"
+                  class="textarea-custom"
+                  rows="7"
+                  placeholder="请输入个性化定制英文提示词（支持多行），例如：
 • Model details: wearing sleek designer black sunglasses, natural wavy long hair, serene closed lips
 • Pose & motion: arms relaxed naturally at sides, confident runway stride, 45-degree exhibition turn
 • Lighting & mood: golden hour rim light, soft 35mm bokeh, gentle breeze swaying garment hem"></textarea>
-            
-            <!-- Quick prompt inspiration tags -->
-            <div class="quick-tags">
-              <span class="quick-tags-title">推荐发型：</span>
-              <button type="button" class="quick-tag" data-insert="romantic French wavy long hair, natural effortless volume"><i class="ph ph-scissors"></i> 法式微卷长发</button>
-              <button type="button" class="quick-tag" data-insert="chic shoulder-length textured bob hairstyle, tucked softly behind ears"><i class="ph ph-scissors"></i> 锁骨短发</button>
-              <button type="button" class="quick-tag" data-insert="sleek high ponytail hairstyle with clean hairline, energetic lookbook poise"><i class="ph ph-scissors"></i> 活力高马尾</button>
-              <button type="button" class="quick-tag" data-insert="silky smooth straight jet black hair, natural clean parting"><i class="ph ph-scissors"></i> 垂坠黑长直</button>
-              <button type="button" class="quick-tag" data-insert="carefree textured high bun hairstyle with soft wisps framing face"><i class="ph ph-scissors"></i> 蓬松高丸子头</button>
-            </div>
-            <div class="quick-tags">
-              <span class="quick-tags-title">姿态与光影：</span>
-              <button type="button" class="quick-tag" data-insert="arms resting naturally at sides with subtle organic elbow curvature, calm confident strides forward"><i class="ph ph-user"></i> 自然垂手走姿</button>
-              <button type="button" class="quick-tag" data-insert="serene composed lookbook expression, naturally closed lips without tension, relaxed jawline, calm gaze"><i class="ph ph-sparkle"></i> 高级从容神态</button>
-              <button type="button" class="quick-tag" data-insert="graceful 45-degree exhibition turn showcasing garment tailoring and silhouette"><i class="ph ph-ruler"></i> 侧身展示剪裁</button>
-              <button type="button" class="quick-tag" data-insert="slow elegant turn showcasing rear tailoring and back construction"><i class="ph ph-arrows-clockwise"></i> 转身展示背面</button>
-              <button type="button" class="quick-tag" data-insert="wearing sleek designer black sunglasses"><i class="ph ph-sunglasses"></i> 黑色墨镜</button>
-              <button type="button" class="quick-tag" data-insert="gentle outdoor breeze subtly fluttering hair strands and garment hem"><i class="ph ph-wind"></i> 微风吹拂发丝</button>
-              <button type="button" class="quick-tag" data-insert="soft natural golden hour backlight, subtle 35mm optical edge highlights, progressive background falloff"><i class="ph ph-sun"></i> 柔和自然逆光</button>
-            </div>
-            <div class="quick-tags">
-              <span class="quick-tags-title">面料质感：</span>
-              <button type="button" class="quick-tag" data-insert="tactile aged vintage leather texture, subtle sheen, metallic zipper highlights"><i class="ph ph-sparkle"></i> 复古皮质光泽</button>
-              <button type="button" class="quick-tag" data-insert="crisp utilitarian flap pockets, precision topstitching, elastic ribbed knit hemline"><i class="ph ph-ruler"></i> 工装罗纹剪裁</button>
-              <button type="button" class="quick-tag" data-insert="authentic heavy raw denim twill texture with golden contrast topstitching"><i class="ph ph-scissors"></i> 原色牛仔面料</button>
-              <button type="button" class="quick-tag" data-insert="soft matte fine-gauge knit turtleneck sweater texture with delicate ribbed cuffs"><i class="ph ph-t-shirt"></i> 针织高领质感</button>
-            </div>
+                
+                <!-- Quick prompt inspiration tags -->
+                <div class="quick-tags">
+                  <span class="quick-tags-title">推荐发型：</span>
+                  <button type="button" class="quick-tag" data-insert="romantic French wavy long hair, natural effortless volume"><i class="ph ph-scissors"></i> 法式微卷长发</button>
+                  <button type="button" class="quick-tag" data-insert="chic shoulder-length textured bob hairstyle, tucked softly behind ears"><i class="ph ph-scissors"></i> 锁骨短发</button>
+                  <button type="button" class="quick-tag" data-insert="sleek high ponytail hairstyle with clean hairline, energetic lookbook poise"><i class="ph ph-scissors"></i> 活力高马尾</button>
+                  <button type="button" class="quick-tag" data-insert="silky smooth straight jet black hair, natural clean parting"><i class="ph ph-scissors"></i> 垂坠黑长直</button>
+                  <button type="button" class="quick-tag" data-insert="carefree textured high bun hairstyle with soft wisps framing face"><i class="ph ph-scissors"></i> 蓬松高丸子头</button>
+                </div>
+                <div class="quick-tags">
+                  <span class="quick-tags-title">姿态与光影：</span>
+                  <button type="button" class="quick-tag" data-insert="arms resting naturally at sides with subtle organic elbow curvature, calm confident strides forward"><i class="ph ph-user"></i> 自然垂手走姿</button>
+                  <button type="button" class="quick-tag" data-insert="serene composed lookbook expression, naturally closed lips without tension, relaxed jawline, calm gaze"><i class="ph ph-sparkle"></i> 高级从容神态</button>
+                  <button type="button" class="quick-tag" data-insert="graceful 45-degree exhibition turn showcasing garment tailoring and silhouette"><i class="ph ph-ruler"></i> 侧身展示剪裁</button>
+                  <button type="button" class="quick-tag" data-insert="slow elegant turn showcasing rear tailoring and back construction"><i class="ph ph-arrows-clockwise"></i> 转身展示背面</button>
+                  <button type="button" class="quick-tag" data-insert="wearing sleek designer black sunglasses"><i class="ph ph-sunglasses"></i> 黑色墨镜</button>
+                  <button type="button" class="quick-tag" data-insert="gentle outdoor breeze subtly fluttering hair strands and garment hem"><i class="ph ph-wind"></i> 微风吹拂发丝</button>
+                  <button type="button" class="quick-tag" data-insert="soft natural golden hour backlight, subtle 35mm optical edge highlights, progressive background falloff"><i class="ph ph-sun"></i> 柔和自然逆光</button>
+                </div>
+                <div class="quick-tags">
+                  <span class="quick-tags-title">面料质感：</span>
+                  <button type="button" class="quick-tag" data-insert="tactile aged vintage leather texture, subtle sheen, metallic zipper highlights"><i class="ph ph-sparkle"></i> 复古皮质光泽</button>
+                  <button type="button" class="quick-tag" data-insert="crisp utilitarian flap pockets, precision topstitching, elastic ribbed knit hemline"><i class="ph ph-ruler"></i> 工装罗纹剪裁</button>
+                  <button type="button" class="quick-tag" data-insert="authentic heavy raw denim twill texture with golden contrast topstitching"><i class="ph ph-scissors"></i> 原色牛仔面料</button>
+                  <button type="button" class="quick-tag" data-insert="soft matte fine-gauge knit turtleneck sweater texture with delicate ribbed cuffs"><i class="ph ph-t-shirt"></i> 针织高领质感</button>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
 

@@ -408,6 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 6. Custom prompt
     if (customPromptInput && typeof opts.customPrompt === 'string') {
       customPromptInput.value = opts.customPrompt;
+      updateCustomPromptBadge();
     }
 
     // 7. Garment image
@@ -816,12 +817,23 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Quick prompt tag suggestions click handler
+  function updateCustomPromptBadge() {
+    const badge = document.getElementById('customPromptBadge');
+    if (!badge || !customPromptInput) return;
+    const hasText = customPromptInput.value.trim().length > 0;
+    badge.style.display = hasText ? 'inline-block' : 'none';
+  }
+
   document.querySelectorAll('.quick-tag').forEach(tag => {
     tag.addEventListener('click', (e) => {
       e.preventDefault();
       const insertText = tag.dataset.insert;
       const tagLabel = tag.textContent.trim();
       if (!customPromptInput) return;
+      const details = document.getElementById('customPromptDetails');
+      if (details && !details.open) {
+        details.open = true;
+      }
       const cur = customPromptInput.value.trim();
       if (!cur) {
         customPromptInput.value = insertText;
@@ -833,6 +845,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(`已添加: ${tagLabel}`);
       }
       customPromptInput.focus();
+      updateCustomPromptBadge();
       saveUserOptions();
     });
   });
@@ -867,7 +880,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   if (customPromptInput) {
-    customPromptInput.addEventListener('input', saveUserOptions);
+    customPromptInput.addEventListener('input', () => {
+      updateCustomPromptBadge();
+      saveUserOptions();
+    });
   }
   if (customSceneText) {
     customSceneText.addEventListener('input', saveUserOptions);

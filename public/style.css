@@ -762,6 +762,101 @@ kbd {
   min-height: 85px;
 }
 
+#customPrompt {
+  min-height: 160px;
+  height: 165px;
+}
+
+/* Collapsible Custom Prompt Section (Default Folded) */
+.custom-prompt-details {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.custom-prompt-details:hover {
+  border-color: var(--border-hover, #444);
+}
+
+.custom-prompt-details[open] {
+  border-color: var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.custom-prompt-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s ease, color 0.2s ease;
+  list-style: none;
+}
+
+.custom-prompt-summary::-webkit-details-marker {
+  display: none;
+}
+
+.custom-prompt-summary:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.custom-prompt-summary .summary-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-prompt-summary .summary-left i {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.custom-prompt-summary .summary-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-prompt-summary .summary-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.custom-prompt-summary .summary-caret {
+  font-size: 13px;
+  color: var(--text-muted);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.custom-prompt-details[open] .summary-caret {
+  transform: rotate(180deg);
+  color: var(--accent);
+}
+
+.custom-prompt-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.custom-prompt-body {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.08);
+}
+
 .style-prompt-box {
   margin-top: 10px;
   background: var(--surface);
