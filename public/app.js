@@ -1033,9 +1033,27 @@ document.addEventListener('DOMContentLoaded', () => {
         isPromptsCustomModified = false;
       }
       updatePromptInspectorBadges();
+      resizeAllInspectorTextareas();
     } catch (err) {
       console.warn('Failed to preview prompts:', err);
     }
+  }
+
+  function adjustTextareaHeight(textarea) {
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    if (textarea.scrollHeight > 0) {
+      textarea.style.height = `${Math.max(textarea.scrollHeight + 4, 60)}px`;
+    }
+  }
+
+  function resizeAllInspectorTextareas() {
+    if (!promptInspectorDetails || !promptInspectorDetails.open) return;
+    requestAnimationFrame(() => {
+      adjustTextareaHeight(inspectorKreaPrompt);
+      adjustTextareaHeight(inspectorSeg1Prompt);
+      adjustTextareaHeight(inspectorSeg2Prompt);
+    });
   }
 
   function queueRefreshPromptInspector() {
@@ -1078,13 +1096,22 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (inspectorKreaPrompt) {
-    inspectorKreaPrompt.addEventListener('input', updatePromptInspectorBadges);
+    inspectorKreaPrompt.addEventListener('input', () => {
+      adjustTextareaHeight(inspectorKreaPrompt);
+      updatePromptInspectorBadges();
+    });
   }
   if (inspectorSeg1Prompt) {
-    inspectorSeg1Prompt.addEventListener('input', updatePromptInspectorBadges);
+    inspectorSeg1Prompt.addEventListener('input', () => {
+      adjustTextareaHeight(inspectorSeg1Prompt);
+      updatePromptInspectorBadges();
+    });
   }
   if (inspectorSeg2Prompt) {
-    inspectorSeg2Prompt.addEventListener('input', updatePromptInspectorBadges);
+    inspectorSeg2Prompt.addEventListener('input', () => {
+      adjustTextareaHeight(inspectorSeg2Prompt);
+      updatePromptInspectorBadges();
+    });
   }
 
   if (btnResetPrompts) {
@@ -1097,11 +1124,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (promptInspectorDetails) {
     promptInspectorDetails.addEventListener('toggle', () => {
-      if (promptInspectorDetails.open && (!inspectorKreaPrompt.value || !inspectorSeg1Prompt.value)) {
-        refreshPromptInspector(false);
+      if (promptInspectorDetails.open) {
+        resizeAllInspectorTextareas();
+        if (!inspectorKreaPrompt.value || !inspectorSeg1Prompt.value) {
+          refreshPromptInspector(false);
+        }
       }
     });
   }
+
+  window.addEventListener('resize', () => {
+    if (promptInspectorDetails && promptInspectorDetails.open) {
+      resizeAllInspectorTextareas();
+    }
+  });
 
   function setButtonsDisabled(disabled) {
     if (btnGenerate) btnGenerate.disabled = disabled;

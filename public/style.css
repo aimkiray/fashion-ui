@@ -903,6 +903,8 @@ kbd {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .prompt-inspector-summary .summary-left i {
@@ -1054,8 +1056,9 @@ kbd {
   background: var(--surface-2);
   color: var(--text-primary);
   resize: vertical;
-  min-height: 95px;
+  min-height: 60px;
   box-sizing: border-box;
+  overflow-y: hidden;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
