@@ -59,6 +59,26 @@ const ASPECT_CANVAS = {
 // model/result instead of replaying the fixed seeds baked into the templates.
 const randomSeed = () => Math.floor(Math.random() * 4294967296);
 
+// Detect white-background flat-lay / mannequin product shots. These force the
+// diffusion model to inherit the flat studio reflections and plastic mannequin
+// texture if ref_boost is too high; loosen it automatically for those inputs.
+function detectFlatlayScoreSync(imagePath) {
+  const scriptPath = path.join(__dirname, 'detect_flatlay.py');
+  if (!fs.existsSync(scriptPath) || !fs.existsSync(imagePath)) return { flatlay_score: 0 };
+  try {
+    const result = require('child_process').execFileSync(
+      process.platform === 'win32' ? 'python' : 'python3',
+      [scriptPath, imagePath],
+      { encoding: 'utf-8', timeout: 3000, maxBuffer: 1 * 1024 * 1024 }
+    );
+    const parsed = JSON.parse(result.trim().split(/\r?\n/).pop());
+    return typeof parsed.flatlay_score === 'number' ? parsed : { flatlay_score: 0 };
+  } catch (err) {
+    console.warn('Flat-lay detection skipped:', err.message);
+    return { flatlay_score: 0 };
+  }
+}
+
 // Fail fast with a clear error if the workflow templates drift from the node
 // ids this server patches, instead of a cryptic TypeError mid-generation.
 function requireNodes(wf, label, ids) {
@@ -149,11 +169,15 @@ const MODEL_STYLES = {
 };
 
 // Scene-specific subject base + gender-aware style modifier.
-function styledSubject(gender, style, femaleBase, maleBase) {
+function styledSubject(gender, style, femaleBase, maleBase, customStylePrompt = null) {
   const isM = gender === 'male';
+  const base = isM ? maleBase : femaleBase;
+  if (customStylePrompt && typeof customStylePrompt === 'string' && customStylePrompt.trim()) {
+    return `${base} ${customStylePrompt.trim()}`;
+  }
   const s = MODEL_STYLES[style] || MODEL_STYLES.classic;
   const modifier = isM ? s.male : s.female;
-  return `${isM ? maleBase : femaleBase} ${modifier}`;
+  return `${base} ${modifier}`;
 }
 
 // Realistic Anti-AI prompt tokens (neutralize plastic skin, mannequin look, and artificial sheen)
@@ -169,15 +193,15 @@ const SCENES = {
     icon: 'buildings',
     description: '阳光洒落的都市街头，自然光影景深，充满潮流时尚感',
     sceneEnvironment: 'on a sunlit city street sidewalk with historic brownstone buildings, natural directional sunlight casting soft ground shadows',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'stylish female model', 'handsome male model');
+      const subj = styledSubject(gender, style, 'stylish female model', 'handsome male model', customStylePrompt);
       const pro = isM ? 'he' : 'she';
       const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length on a sunlit city street sidewalk with historic brownstone buildings, transfer the outfit, full body editorial fashion lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed expression, closed lips, natural directional sunlight casting soft realistic ground shadows, authentic human skin texture with visible micro pores, natural skin sheen, fine skin lines, realistic subsurface scattering, tactile fabric weave and seam details, shot on 35mm lens, subtle film grain${extra}`,
-        seg1_prompt: `A commercial lookbook fashion video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image. Steady gimbal tracking shot at eye level: ${pro} takes slow, measured runway strides forward toward the camera along a sunlit urban asphalt sidewalk (1 step per second), both arms swaying naturally at sides with relaxed open hands. Calm composed lookbook expression with closed lips, subtle relaxed facial features. Natural fabric and leather drape and garment movement swaying organically with each step. Constant directional daylight, sharp textile details, soft circular background bokeh, stable camera framing${extra}.\n\nAudio: distant muffled city traffic hum, crisp footsteps on asphalt sidewalk, subtle soft rustle of clothing fabric swaying as ${pro} walks.`,
+        krea_prompt: `a ${subj} standing full-length on a sunlit city street sidewalk with historic brownstone buildings, transfer the outfit, full body editorial fashion lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed expression, closed lips, natural directional sunlight casting soft realistic ground shadows, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details, shot on 35mm lens, subtle film grain${extra}`,
+        seg1_prompt: `A commercial lookbook fashion video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image. Steady gimbal tracking shot at eye level: ${pro} takes slow, measured runway strides forward toward the camera along a sunlit urban asphalt sidewalk (1 step per second), both arms swaying naturally at sides with relaxed open hands. Calm composed lookbook expression with closed lips, subtle relaxed facial features. Natural fabric and leather drape and garment movement swaying organically with each step. Constant directional daylight, authentic textile details, soft circular background bokeh, stable camera framing${extra}.\n\nAudio: distant muffled city traffic hum, crisp footsteps on asphalt sidewalk, subtle soft rustle of clothing fabric swaying as ${pro} walks.`,
         seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit slows ${pos} stride, executing a smooth 45-degree exhibition turn to showcase the side silhouette, drape, and rear tailoring of the clothing, glancing casually toward the lens with a calm serene expression and closed lips. Steady slow 35mm camera pan capturing leather grain, fabric stitching, garment folds, and clean hemlines. Constant natural sunlight, warm city background bokeh, stable facial features, stable anatomy${extra}.\n\nAudio: continuous city ambient background, soft shoe pivot on pavement, quiet fabric flutter, gentle outdoor breeze.`
       };
     }
@@ -189,16 +213,16 @@ const SCENES = {
     icon: 'camera',
     description: '纯色摄影棚无影墙，高端柔光箱打光，聚焦面料剪裁与版型结构',
     sceneEnvironment: 'in a clean minimalist studio against a neutral grey cyclorama backdrop, diffuse softbox studio lighting',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'stylish female model', 'handsome male model');
+      const subj = styledSubject(gender, style, 'stylish female model', 'handsome male model', customStylePrompt);
       const pro = isM ? 'he' : 'she';
       const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a professional ${subj} standing full-length in a clean minimalist studio against a neutral grey cyclorama backdrop, transfer the outfit, full body commercial catalogue lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed editorial expression, closed lips, diffuse softbox studio lighting, authentic human skin texture with visible micro pores, natural skin sheen, realistic subsurface scattering on cheeks, tactile cloth texture and seam details, shot on 50mm lens, subtle organic grain, soft ground contact shadow${extra}`,
-        seg1_prompt: `A commercial lookbook fashion video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image, situated against a pristine neutral grey cyclorama studio backdrop. Smooth motorized camera dolly tracking backward at eye level: ${pro} takes slow, deliberate runway steps forward, both arms swaying naturally at sides with relaxed open hands, with calm poise and closed lips. Sharp garment tailoring, natural cloth and leather physics, ultra-high definition weave and grain, zero shadow pulsing. Uniform dual softbox high-key commercial illumination${extra}.\n\nAudio: dead-quiet soundproof studio room tone, soft rhythmic footsteps on floor, subtle tactile rustle of garment cloth swaying.`,
-        seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit smoothly slows ${pos} cadence and executes an elegant 45-degree exhibition turn, allowing the camera to inspect the side silhouette, collar construction, and rear garment cut, pausing with serene poise and closed lips. Tripod steady framing, soft high-key commercial studio lighting, pristine catalogue aesthetic, stable facial features, stable anatomy${extra}.\n\nAudio: quiet soundproof studio room tone, soft shoe pivot on floor, quiet whisper of moving garment fabric.`
+        krea_prompt: `a professional ${subj} standing full-length in a clean minimalist studio against a neutral grey cyclorama backdrop, transfer the outfit, full body commercial catalogue lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed editorial expression, closed lips, diffuse softbox studio lighting, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering on cheeks, natural catchlights in the eyes, tactile cloth texture and seam details, shot on 50mm lens, subtle organic grain, soft ground contact shadow${extra}`,
+        seg1_prompt: `A commercial lookbook fashion video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image, situated against a neutral grey cyclorama studio backdrop. Smooth motorized camera dolly tracking backward at eye level: ${pro} takes slow, deliberate runway steps forward, both arms swaying naturally at sides with relaxed open hands, with calm poise and closed lips. Clean garment tailoring, natural cloth and leather physics, natural weave texture and subtle film grain, zero shadow pulsing. Dual softbox studio illumination with soft natural falloff${extra}.\n\nAudio: dead-quiet soundproof studio room tone, soft rhythmic footsteps on floor, subtle tactile rustle of garment cloth swaying.`,
+        seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit smoothly slows ${pos} cadence and executes an elegant 45-degree exhibition turn, allowing the camera to inspect the side silhouette, collar construction, and rear garment cut, pausing with serene poise and closed lips. Tripod steady framing, softbox studio lighting with gentle shadow falloff, authentic catalogue aesthetic, stable facial features, stable anatomy${extra}.\n\nAudio: quiet soundproof studio room tone, soft shoe pivot on floor, quiet whisper of moving garment fabric.`
       };
     }
   },
@@ -209,14 +233,14 @@ const SCENES = {
     icon: 'building',
     description: '现代玻璃幕墙大厦大堂，晨光透射，干练优雅的商务名媛/精英穿搭',
     sceneEnvironment: 'in the grand entrance lobby of a modern glass corporate skyscraper, polished granite floors, morning architectural sunlight filtering through high glass curtain walls',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'chic business professional woman', 'professional businessman');
+      const subj = styledSubject(gender, style, 'chic business professional woman', 'professional businessman', customStylePrompt);
       const pro = isM ? 'he' : 'she';
       const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in the grand entrance lobby of a modern glass corporate skyscraper, polished granite floors, transfer the outfit, full body executive lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, composed executive poise, closed lips, morning architectural sunlight filtering through high glass curtain walls, authentic human skin texture with visible micro pores, natural skin sheen, realistic subsurface scattering, tactile leather grain and fabric drape, shot on 35mm lens, subtle film grain${extra}`,
+        krea_prompt: `a ${subj} standing full-length in the grand entrance lobby of a modern glass corporate skyscraper, polished granite floors, transfer the outfit, full body executive lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, composed executive poise, closed lips, morning architectural sunlight filtering through high glass curtain walls, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile leather grain and fabric drape, shot on 35mm lens, subtle film grain${extra}`,
         seg1_prompt: `A commercial career lookbook video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image walking forward through the spacious lobby of a glass corporate skyscraper. Smooth forward tracking shot at eye level: ${pro} walks with confident upright posture, both arms swaying naturally at sides with relaxed open hands, and a calm composed expression with closed lips. Morning sunbeams filtering diagonally through high glass windows, casting clean architectural reflections on the polished floor. Crisp garment lines, natural fabric movement${extra}.\n\nAudio: spacious architectural glass lobby ambiance, subtle acoustic reverberation, crisp confident footsteps echoing gently on polished floor.`,
         seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit halts smoothly near a glass architectural handrail overlooking the skyline, turning 45 degrees to reveal the tailored silhouette, leather grain, back seam construction, and garment drape. ${pro} glances toward the lens with a composed confident expression and closed lips. Steady slow camera glide, constant natural morning illumination, stable facial features, stable anatomy${extra}.\n\nAudio: tranquil glass lobby atmosphere, soft shoe step, quiet fabric motion, distant muted indoor reverberation.`
       };
@@ -229,15 +253,15 @@ const SCENES = {
     icon: 'storefront',
     description: '奢华大理石与柔光射灯的高端专柜，极具高级感与面料奢华质感',
     sceneEnvironment: 'in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, warm 3200K architectural recessed spotlights',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'glamorous female fashion model', 'handsome sophisticated male model');
+      const subj = styledSubject(gender, style, 'elegant female fashion model', 'confident refined male model', customStylePrompt);
       const pro = isM ? 'he' : 'she';
       const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, transfer the outfit, full body luxury retail lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene glamorous gaze, closed lips, warm 3200K architectural recessed spotlights with soft falloff, authentic human skin texture with visible micro pores, natural skin sheen, realistic subsurface scattering, tactile fabric weave and leather grain, shot on 35mm lens, subtle film grain${extra}`,
-        seg1_prompt: `A luxury retail commercial lookbook video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image in a lavish warm-toned concept boutique with polished Italian marble floors. Smooth camera glide tracking backward at eye level: ${pro} walks gracefully forward with both arms swaying naturally at sides with relaxed open hands, a calm composed expression and closed lips. Warm 3200K architectural spotlights shimmering across fabric textures and clean seams. Fluid motion, perfectly locked anatomy, elegant posture${extra}.\n\nAudio: luxurious quiet boutique interior ambiance, subtle acoustic reverberation, crisp rhythmic footsteps clicking gently on polished marble floor, soft silky cloth rustle.`,
+        krea_prompt: `a ${subj} standing full-length in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, transfer the outfit, full body luxury retail lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed gaze, closed lips, warm 3200K architectural recessed spotlights with soft falloff, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and leather grain, shot on 35mm lens, subtle film grain${extra}`,
+        seg1_prompt: `A luxury retail commercial lookbook video faithful to the reference image: the identical ${subj} wearing the exact outfit from the reference image in a lavish warm-toned concept boutique with polished Italian marble floors. Smooth camera glide tracking backward at eye level: ${pro} walks gracefully forward with both arms swaying naturally at sides with relaxed open hands, a calm composed expression and closed lips. Warm 3200K architectural spotlights gently grazing fabric textures and clean seams. Fluid motion, perfectly locked anatomy, elegant posture${extra}.\n\nAudio: luxurious quiet boutique interior ambiance, subtle acoustic reverberation, crisp rhythmic footsteps clicking gently on polished marble floor, soft silky cloth rustle.`,
         seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit gently pauses beside an architectural display plinth, turning 45 degrees to showcase the garment silhouette, seam tailoring, and textile craftsmanship. Smooth slow camera pan highlighting the neckline, leather grain, fabric weave, and rear cut. Composed poised lookbook expression, closed lips, constant warm 3200K architectural spotlighting, creamy background bokeh, stable anatomy${extra}.\n\nAudio: warm boutique interior ambiance, gentle soft reverberation, soft shoe pivot on marble, quiet fabric glide.`
       };
     }
@@ -249,14 +273,14 @@ const SCENES = {
     icon: 'leaf',
     description: '绿意盎然的公园石板路与林荫微风，适合碎花裙、风衣及度假休闲款',
     sceneEnvironment: 'in a lush sun-dappled botanical garden along a smooth stone paver pathway, blooming foliage, natural outdoor daylight, dappled sunbeam highlights',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'radiant female fashion model', 'athletic handsome male model');
+      const subj = styledSubject(gender, style, 'natural female fashion model', 'athletic relaxed male model', customStylePrompt);
       const pro = isM ? 'he' : 'she';
       const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in a lush sun-dappled botanical garden along a smooth stone paver pathway, blooming foliage, transfer the outfit, full body lifestyle lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, peaceful serene expression, closed lips, natural outdoor daylight, soft dappled sunlight, authentic human skin texture with visible micro pores, natural skin sheen, realistic subsurface scattering, tactile cloth folds and texture, shot on 35mm lens, subtle film grain${extra}`,
+        krea_prompt: `a ${subj} standing full-length in a lush sun-dappled botanical garden along a smooth stone paver pathway, blooming foliage, transfer the outfit, full body lifestyle lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, peaceful serene expression, closed lips, natural outdoor daylight, soft dappled sunlight, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile cloth folds and texture, shot on 35mm lens, subtle film grain${extra}`,
         seg1_prompt: `An outdoor lifestyle fashion lookbook video faithful to the reference image: the identical ${subj} wearing the reference clothing walks forward along a sun-dappled stone path through a lush green park. Steady forward tracking gimbal camera: ${pro} walks at a relaxed natural cadence, both arms swaying naturally at sides with relaxed open hands, with a calm serene expression and closed lips. Sunlight filtering through tree canopies creating gentle dappled patterns across the clothing. Natural cloth and leather physics swaying softly in the fresh outdoor breeze${extra}.\n\nAudio: gentle outdoor breeze rustling green tree leaves, peaceful distant birdsong, soft footsteps on stone pavers, subtle cloth rustle.`,
         seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit pauses beside blooming greenery, turning smoothly 45 degrees to showcase the garment movement, leather grain, fabric drape, and seam tailoring. Serene gentle gaze, closed lips, natural directional sunlight filtered through tree canopies creating a soft rim light on ${pos} silhouette and garment edges. Steady camera pan, stable facial features, stable anatomy${extra}.\n\nAudio: continuous tranquil birdsong, gentle outdoor wind gust, soft stone step, crisp fabric flutter in the breeze.`
       };
@@ -269,14 +293,14 @@ const SCENES = {
     icon: 'coffee',
     description: '落地窗暖调咖啡馆，慵懒生活气息，适合针织衫、卫衣与日常日常穿搭',
     sceneEnvironment: 'in a cozy Nordic-aesthetic cafe with warm timber oak interiors and large floor-to-ceiling sunlit windows, warm natural daylight and soft interior fill',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'stylish young woman', 'stylish young man');
+      const subj = styledSubject(gender, style, 'stylish young woman', 'stylish young man', customStylePrompt);
       const pro = isM ? 'he' : 'she';
       const pos = isM ? 'his' : 'her';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in a cozy Nordic-aesthetic cafe with warm timber oak interiors and large floor-to-ceiling sunlit windows, transfer the outfit, full body cozy editorial lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, relaxed serene expression, closed lips, warm natural window light with soft interior fill, authentic human skin texture with visible micro pores, natural skin sheen, realistic subsurface scattering, tactile knit and fabric weave, shot on 35mm lens, subtle film grain${extra}`,
+        krea_prompt: `a ${subj} standing full-length in a cozy Nordic-aesthetic cafe with warm timber oak interiors and large floor-to-ceiling sunlit windows, transfer the outfit, full body cozy editorial lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, relaxed serene expression, closed lips, warm natural window light with soft interior fill, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile knit and fabric weave, shot on 35mm lens, subtle film grain${extra}`,
         seg1_prompt: `A cozy lifestyle fashion lookbook video faithful to the reference image: the identical ${subj} wearing the exact outfit walks forward with natural poise in an aesthetic Nordic-style cafe near sunlit floor-to-ceiling windows. Smooth eye-level gimbal tracking shot: ${pro} walks at a relaxed pace with both arms swaying naturally at sides with relaxed open hands, a calm peaceful expression and closed lips. Warm timber tones, soft ambient lighting, natural garment drape swaying gently${extra}.\n\nAudio: quiet ambient cafe murmur in the far background, distant gentle hiss of espresso machine steam, soft footsteps on hardwood timber floor, quiet fabric rustle.`,
         seg2_prompt: `Continuing seamlessly from the previous walk: the same ${subj} in the identical outfit pauses beside the sunlit window, turning 45 degrees to reveal the garment silhouette, leather grain, back tailoring, and fabric weave. Smooth camera pan highlighting the collar line, pocket details, and cloth texture. Calm peaceful expression, closed lips, warm daylight, soft shallow depth of field, stable anatomy${extra}.\n\nAudio: gentle cafe room tone, quiet atmospheric background murmur, soft shoe step on wood floor, subtle fabric rustle.`
       };
@@ -289,17 +313,17 @@ const SCENES = {
     icon: 'palette',
     description: '自由描述任意个性化展示背景（海滩落日、雪山木屋、赛博霓虹、古风江南等）',
     sceneEnvironment: 'in an aesthetic commercial fashion lookbook background, natural commercial lighting',
-    buildPrompts: (gender = 'female', customPrompt = '', customScene = '', style = 'classic') => {
+    buildPrompts: (gender = 'female', customPrompt = '', customScene = '', style = 'classic', customStylePrompt = '') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'stylish female model', 'handsome male model');
+      const subj = styledSubject(gender, style, 'stylish female model', 'handsome male model', customStylePrompt);
       const pro = isM ? 'he' : 'she';
       const pos = isM ? 'his' : 'her';
-      const sceneDesc = (customScene && customScene.trim()) ? customScene.trim() : 'a stunning aesthetic commercial fashion lookbook background';
+      const sceneDesc = (customScene && customScene.trim()) ? customScene.trim() : 'an authentic editorial fashion lookbook background';
       const extra = customPrompt ? `, ${customPrompt}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in ${sceneDesc}, transfer the outfit, full body editorial lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed expression, closed lips, elegant confident posture, realistic lighting consistent with the environment, authentic human skin texture with visible micro pores, natural skin sheen, realistic subsurface scattering, tactile fabric weave, shot on 35mm lens, subtle film grain, soft contact shadows${extra}`,
-        seg1_prompt: `A commercial lookbook fashion showcase video faithful to the reference image: the ${subj} wearing the identical outfit, situated in ${sceneDesc}. Smooth steady gimbal tracking shot at eye level: ${pro} walks forward at a measured natural cadence, both arms swaying naturally at sides with relaxed open hands, with calm confidence and closed lips toward the lens. Fabric drape, leather grain, and textile weave clearly visible, natural organic cloth physics. Cinematic ambient lighting consistent with the environment${extra}.\n\nAudio: natural atmospheric ambiance matching the acoustic surroundings, subtle rhythmic footsteps, soft fabric rustle as ${pro} moves.`,
-        seg2_prompt: `Continuing seamlessly from the previous shot: the same ${subj} in the identical outfit situated in ${sceneDesc} slows ${pos} stride and turns 45 degrees to showcase the silhouette, fabric flow, leather grain, and rear tailoring of the clothing, pausing naturally with a calm composed glance toward the lens, closed lips and serene poise. Steady smooth camera pan revealing fabric weave and flow. Harmonious lighting, ultra sharp details, stable facial features, stable anatomy${extra}.\n\nAudio: continuous atmospheric ambient background, gentle fabric movement sound, subtle environmental breeze.`
+        krea_prompt: `a ${subj} standing full-length in ${sceneDesc}, transfer the outfit, full body editorial lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed expression, closed lips, elegant confident posture, realistic lighting consistent with the environment, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave, shot on 35mm lens, subtle film grain, soft contact shadows${extra}`,
+        seg1_prompt: `A commercial lookbook fashion showcase video faithful to the reference image: the ${subj} wearing the identical outfit, situated in ${sceneDesc}. Smooth steady gimbal tracking shot at eye level: ${pro} walks forward at a measured natural cadence, both arms swaying naturally at sides with relaxed open hands, with calm confidence and closed lips toward the lens. Fabric drape, leather grain, and textile weave clearly visible, natural organic cloth physics. Natural ambient lighting consistent with the environment${extra}.\n\nAudio: natural atmospheric ambiance matching the acoustic surroundings, subtle rhythmic footsteps, soft fabric rustle as ${pro} moves.`,
+        seg2_prompt: `Continuing seamlessly from the previous shot: the same ${subj} in the identical outfit situated in ${sceneDesc} slows ${pos} stride and turns 45 degrees to showcase the silhouette, fabric flow, leather grain, and rear tailoring of the clothing, pausing naturally with a calm composed glance toward the lens, closed lips and serene poise. Steady smooth camera pan revealing fabric weave and flow. Harmonious natural lighting, natural textile details, stable facial features, stable anatomy${extra}.\n\nAudio: continuous atmospheric ambient background, gentle fabric movement sound, subtle environmental breeze.`
       };
     }
   }
@@ -505,6 +529,10 @@ app.get('/api/scenes', (req, res) => {
   res.json(list);
 });
 
+app.get('/api/model-styles', (req, res) => {
+  res.json(MODEL_STYLES);
+});
+
 app.post('/api/upload', (req, res) => {
   upload.single('image')(req, res, (err) => {
     if (err) {
@@ -532,6 +560,7 @@ app.post('/api/generate', async (req, res) => {
     custom_scene = '',
     gender = 'female',
     model_style = 'classic',
+    model_style_prompt = '',
     custom_prompt = '',
     aspect_ratio = '3:4',
     mode = 'video'
@@ -567,6 +596,7 @@ app.post('/api/generate', async (req, res) => {
     scene: sceneConfig,
     gender,
     model_style: modelStyleKey,
+    model_style_prompt: typeof model_style_prompt === 'string' ? model_style_prompt.trim() : '',
     custom_scene: isCustomScene ? custom_scene : '',
     custom_prompt,
     aspect_ratio,
@@ -626,6 +656,7 @@ app.post('/api/generate-batch', async (req, res) => {
     scenes = ['street', 'studio', 'boutique'],
     gender = 'female',
     model_style = 'classic',
+    model_style_prompt = '',
     custom_prompt = '',
     custom_scene = '',
     aspect_ratio = '3:4',
@@ -661,6 +692,7 @@ app.post('/api/generate-batch', async (req, res) => {
       scene: scConfig,
       gender,
       model_style: modelStyleKey,
+      model_style_prompt: typeof model_style_prompt === 'string' ? model_style_prompt.trim() : '',
       custom_scene: scKey === 'custom' ? custom_scene : '',
       custom_prompt,
       aspect_ratio,
@@ -837,6 +869,7 @@ async function runGenerationJob(taskId) {
     .replace(/\baudio\s*:/gi, '')
     .replace(/露齿笑|露牙笑|露齿|大笑|狂笑|张嘴笑/g, '闭唇从容神采')
     .replace(/\b(toothy smile|open mouth|grinning|laughing|showing teeth)\b/gi, 'closed lips, serene expression')
+    .replace(/\b(8k resolution|8k|hyperrealistic|photorealistic|ultra sharp focus|ultra sharp|pristine|flawless|stunning|cinematic|glamorous|radiant|shimmering|over-sharpened)\b/gi, '')
     .replace(/\r\n|\r|\n/g, ', ')
     .replace(/\s+/g, ' ')
     .replace(/[,，\s]+[,，]/g, ', ')
@@ -846,7 +879,7 @@ async function runGenerationJob(taskId) {
   const cleanCustom = stripTextboxNoise(task.custom_prompt);
   const cleanCustomScene = stripTextboxNoise(task.custom_scene);
 
-  const prompts = task.scene.buildPrompts(task.gender, cleanCustom, cleanCustomScene, task.model_style || 'classic');
+  const prompts = task.scene.buildPrompts(task.gender, cleanCustom, cleanCustomScene, task.model_style || 'classic', task.model_style_prompt || '');
 
   const sceneDisplayName = task.scene.id === 'custom'
     ? (cleanCustomScene ? `自定义场景: ${cleanCustomScene.slice(0, 16)}` : '自定义专属场景')
@@ -878,15 +911,29 @@ async function runGenerationJob(taskId) {
     }
     fs.copyFileSync(srcInputPath, dstTempInputPath);
 
+    // Detect if the uploaded garment image is a white-background flat-lay/mannequin.
+    // High-score inputs push plastic studio look onto the model, so we loosen ref_boost.
+    const garmentAnalysis = detectFlatlayScoreSync(srcInputPath);
+    const isFlatlay = garmentAnalysis.flatlay_score >= 0.65;
+    const garmentRefBoost = isFlatlay ? 0.94 : 0.96;
+    if (garmentAnalysis.flatlay_score > 0) {
+      console.log(`[krea2] garment flat-lay score ${garmentAnalysis.flatlay_score}, ref_boost=${garmentRefBoost}`);
+    }
+
     const kreaWf = JSON.parse(fs.readFileSync(kreaWfPath, 'utf-8'));
     requireNodes(kreaWf, 'Krea-2', ['5', '7', '9', '11', '13']);
     kreaWf['5']['inputs']['image'] = `online_temp/${tempInputFile}`;
     kreaWf['9']['inputs']['prompt'] = prompts.krea_prompt;
+    // Guide the vision encoder to focus on identity, skin texture, and garment details
+    // instead of generic background description. Empty falls back to the training default.
+    if (kreaWf['9']) {
+      kreaWf['9']['inputs']['system_prompt'] = 'Describe the reference image focusing on exact facial identity, natural skin texture with visible pores and fine lines, fabric weave, seam construction, garment silhouette, and realistic environmental lighting.';
+    }
     if (kreaWf['4']) {
       kreaWf['4']['inputs']['strength_model'] = 0.92;
     }
     if (kreaWf['8']) {
-      kreaWf['8']['inputs']['ref_boost'] = 0.96;
+      kreaWf['8']['inputs']['ref_boost'] = garmentRefBoost;
     }
     if (kreaWf['9']) {
       kreaWf['9']['inputs']['grounding_px'] = 1024;
@@ -894,6 +941,36 @@ async function runGenerationJob(taskId) {
     if (kreaWf['10']) {
       kreaWf['10']['inputs']['prompt'] = KREA_NEGATIVE_PROMPT_BASE;
       kreaWf['10']['inputs']['grounding_px'] = 1024;
+    }
+    // Slightly raise step count for dpmpp_2m to get gentler gradients on skin/fabrics.
+    if (kreaWf['11']) {
+      kreaWf['11']['inputs']['steps'] = 10;
+      kreaWf['11']['inputs']['sampler_name'] = 'dpmpp_2m';
+      kreaWf['11']['inputs']['scheduler'] = 'sgm_uniform';
+    }
+    // Film grain: subtle 2% strength noise breaks AI pixel-perfect smoothness.
+    // Insert the node dynamically if the workflow template does not yet contain it.
+    function nextNodeId(wf) {
+      const ids = Object.keys(wf).map(Number).filter(n => !isNaN(n) && n > 0);
+      return String(Math.max(0, ...ids) + 1);
+    }
+    const grainCandidate = Object.entries(kreaWf).find(([, n]) => n && n.class_type === 'ImageAddNoise');
+    let grainId = grainCandidate ? grainCandidate[0] : null;
+    if (!grainId) {
+      const decodeId = Object.entries(kreaWf).find(([, n]) => n && n.class_type === 'VAEDecode')?.[0];
+      const saveEntry = Object.entries(kreaWf).find(([, n]) => n && n.class_type === 'SaveImage');
+      if (decodeId && saveEntry) {
+        grainId = nextNodeId(kreaWf);
+        kreaWf[grainId] = {
+          class_type: 'ImageAddNoise',
+          inputs: { image: [decodeId, 0], seed: randomSeed(), strength: 0.02 }
+        };
+        saveEntry[1].inputs.images = [grainId, 0];
+      }
+    }
+    if (grainId && kreaWf[grainId]) {
+      kreaWf[grainId].inputs.seed = randomSeed();
+      kreaWf[grainId].inputs.strength = 0.02;
     }
 
     // -------------------------------------------------------------
@@ -916,8 +993,8 @@ async function runGenerationJob(taskId) {
 
         kreaWf['8']['inputs']['source_latent_b'] = ['21', 0];
         kreaWf['8']['inputs']['source_image_b'] = ['20', 0];
-        kreaWf['8']['inputs']['ref_boost'] = 1.0; // second ref = model identity
-        kreaWf['8']['inputs']['ref_boost_a'] = 0.96; // first ref = clothing outfit
+        kreaWf['8']['inputs']['ref_boost'] = 1.0; // second ref = model identity (face must stay locked)
+        kreaWf['8']['inputs']['ref_boost_a'] = garmentRefBoost; // first ref = clothing outfit
 
         kreaWf['9']['inputs']['image_b'] = ['20', 0];
         if (kreaWf['10']) {
@@ -930,7 +1007,7 @@ async function runGenerationJob(taskId) {
           ? `in ${cleanCustomScene}, realistic lighting consistent with the environment`
           : (task.scene.sceneEnvironment || 'in an aesthetic fashion lookbook background, natural commercial lighting');
         const modelGenderLabel = task.gender === 'male' ? 'male model' : 'female model';
-        kreaWf['9']['inputs']['prompt'] = `transfer the clothing and outfit from the first reference image onto the ${modelGenderLabel} in the second reference image, strictly preserving their exact facial features, facial identity, eye shape, nose shape, and hairstyle, full body editorial lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, standing ${sceneEnv}, serene composed expression, closed lips, authentic human skin texture with visible micro pores, natural skin sheen, realistic subsurface scattering, tactile fabric weave and seam details, shot on 35mm lens, subtle film grain, soft contact shadows${cleanCustom ? ', ' + cleanCustom : ''}`;
+        kreaWf['9']['inputs']['prompt'] = `transfer the clothing and outfit from the first reference image onto the ${modelGenderLabel} in the second reference image, strictly preserving their exact facial features, facial identity, eye shape, nose shape, and hairstyle, full body editorial lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, standing ${sceneEnv}, serene composed expression, closed lips, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details, shot on 35mm lens, subtle film grain, soft contact shadows${cleanCustom ? ', ' + cleanCustom : ''}`;
       }
     } else if (task.scene_image) {
       const srcScenePath = path.join(PROJECT_INPUT_DIR, task.scene_image);
@@ -951,7 +1028,7 @@ async function runGenerationJob(taskId) {
         };
         kreaWf['8']['inputs']['source_latent_b'] = ['21', 0];
         kreaWf['8']['inputs']['source_image_b'] = ['20', 0];
-        kreaWf['8']['inputs']['ref_boost'] = 0.96; // second ref = garment
+        kreaWf['8']['inputs']['ref_boost'] = garmentRefBoost; // second ref = garment (loosen for flat-lay)
         kreaWf['8']['inputs']['ref_boost_a'] = 1.0; // first ref = scene
 
         kreaWf['9']['inputs']['image_b'] = ['20', 0];
@@ -961,8 +1038,8 @@ async function runGenerationJob(taskId) {
           kreaWf['10']['inputs']['grounding_px'] = 1024;
         }
 
-        const subj = styledSubject(task.gender, task.model_style || 'classic', 'stylish female model', 'handsome male model');
-        kreaWf['9']['inputs']['prompt'] = `a ${subj} standing full-length in the background environment from the first reference image, wearing the exact clothing and outfit from the second reference image, full body editorial lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed expression, closed lips, realistic illumination matched to the background environment, authentic human skin texture with visible micro pores, natural skin sheen, realistic subsurface scattering, tactile fabric weave, shot on 35mm lens, subtle film grain, soft contact shadows${cleanCustom ? ', ' + cleanCustom : ''}`;
+        const subj = styledSubject(task.gender, task.model_style || 'classic', 'stylish female model', 'handsome male model', task.model_style_prompt || '');
+        kreaWf['9']['inputs']['prompt'] = `a ${subj} standing full-length in the background environment from the first reference image, wearing the exact clothing and outfit from the second reference image, full body editorial lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed expression, closed lips, realistic illumination matched to the background environment, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave, shot on 35mm lens, subtle film grain, soft contact shadows${cleanCustom ? ', ' + cleanCustom : ''}`;
       }
     }
     kreaWf['11']['inputs']['seed'] = randomSeed();

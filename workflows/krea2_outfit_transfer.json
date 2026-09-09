@@ -96,7 +96,7 @@
         "5",
         0
       ],
-      "prompt": "a professional fashion model walking on a sunny city street, transfer the outfit, full body commercial lookbook photography, elegant posture, authentic skin texture",
+      "prompt": "a stylish female model standing full-length on a sunlit city street sidewalk, transfer the outfit, full body editorial fashion lookbook photography, head-to-toe framed with complete shoes and feet in view, both arms straight down relaxed naturally at sides, both hands open and fully visible with natural five fingers clearly shown on each hand, serene composed expression, closed lips, natural directional sunlight casting soft realistic ground shadows, authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details, shot on 35mm lens, subtle film grain",
       "grounding_px": 1024
     }
   },
@@ -111,7 +111,7 @@
         "5",
         0
       ],
-      "prompt": "plastic skin, waxy skin, airbrushed, mannequin, 3d render, cgi, over-smoothed skin, doll, ceramic skin, beauty filter, oversaturated, wax figure, artificial sheen, illustration, cartoon, blurry, low quality, distorted, extra limbs, bad anatomy, deformed",
+      "prompt": "plastic skin, waxy skin, airbrushed, mannequin, 3d render, cgi, over-smoothed skin, doll, ceramic skin, fake eyes, digital painting, beauty filter, fake reflections, oversaturated, perfect symmetry, flat lighting, wax figure, octane render, unreal engine, illustration, cartoon, hands in pockets, hands tucked into pockets, hands in pants pockets, hands in jacket pockets, hand in pocket, thumb in pocket, thumbs hooked in pockets, hands tucked in waistband, hand on hip, hands on waist, hidden fingers, hidden hands, hands behind back, missing hands, missing fingers, extra fingers, deformed hands, mutated hands, bad hands, fused fingers, open mouth, teeth, toothy smile, grinning, smiling with teeth, laughing, parted lips, creepy smile, exaggerated facial expression, grimace, cropped feet, cut off feet, cut off shoes, cut off legs, cropped legs, half body, torso only, close-up, cropped head, out of frame, blurry, low quality, distorted clothing, extra limbs, bad anatomy, deformed, duplicate person, watermark, text, signature",
       "grounding_px": 1024
     }
   },
@@ -137,8 +137,8 @@
       "seed": 42,
       "steps": 8,
       "cfg": 1.0,
-      "sampler_name": "euler",
-      "scheduler": "simple",
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "sgm_uniform",
       "denoise": 1.0
     }
   },
@@ -159,10 +159,21 @@
     "class_type": "SaveImage",
     "inputs": {
       "images": [
-        "12",
+        "14",
         0
       ],
       "filename_prefix": "krea_outfit_test"
+    }
+  },
+  "14": {
+    "class_type": "ImageAddNoise",
+    "inputs": {
+      "image": [
+        "12",
+        0
+      ],
+      "seed": 42,
+      "strength": 0.02
     }
   }
 }

@@ -182,6 +182,22 @@
                 <span>中性酷感</span>
               </label>
             </div>
+            <!-- Model Style Prompt Box -->
+            <div class="style-prompt-box">
+              <div class="style-prompt-header">
+                <span class="style-prompt-title">
+                  <i class="ph ph-sparkle"></i> 风格提示词（可微调）：
+                </span>
+                <button type="button" class="btn-reset-style" id="btnResetStylePrompt" title="重置回当前风格默认提示词">
+                  <i class="ph ph-arrow-counter-clockwise"></i> 恢复默认
+                </button>
+              </div>
+              <textarea
+                id="modelStylePrompt"
+                class="textarea-custom style-prompt-textarea"
+                rows="2"
+                placeholder="模特风格对应的提示词，可在此自由修改调整..."></textarea>
+            </div>
           </div>
 
           <div class="option-group">

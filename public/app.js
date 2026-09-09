@@ -89,6 +89,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const lightboxImg = document.getElementById('lightboxImg');
   const btnCloseLightbox = document.getElementById('btnCloseLightbox');
 
+  const modelStylePromptInput = document.getElementById('modelStylePrompt');
+  const btnResetStylePrompt = document.getElementById('btnResetStylePrompt');
+
   // Helper: HTML entity escaping
   function escapeHtml(str) {
     if (!str) return '';
@@ -116,10 +119,100 @@ document.addEventListener('DOMContentLoaded', () => {
   const STORAGE_KEY = 'fashion_ui_user_options_v2';
   const ACTIVE_TASK_KEY = 'fashion_ui_active_task';
   const ACTIVE_BATCH_KEY = 'fashion_ui_active_batch';
+  const STYLE_PROMPTS_KEY = 'fashion_ui_style_prompts_v1';
   const IDB_NAME = 'fashion_ui_storage_v2';
   const STORE_GARMENT = 'uploaded_garment';
   const STORE_MODEL = 'uploaded_model';
   const STORE_SCENE = 'uploaded_scene';
+
+  // Default Model Style Prompts
+  const DEFAULT_STYLE_PROMPTS = {
+    female: {
+      classic: 'with poised editorial elegance, serene composed expression, mouth closed, closed lips, and relaxed upright posture',
+      sweet: 'with fresh-faced youthful purity, serene gentle features, quiet tranquil poise, mouth closed, softly closed lips, calm tender gaze',
+      athletic: 'with an athletic healthy glow, calm focused expression, mouth closed, closed lips, and upright confident posture',
+      mature: 'with commanding graceful poise, sophisticated refined features, mouth closed, closed lips, and poised upright posture',
+      cool: 'with a chic androgynous edge, cool understated attitude, mouth closed, closed lips, and upright lookbook posture'
+    },
+    male: {
+      classic: 'with sharp jawline, editorial charisma, calm composed expression, mouth closed, closed lips, and upright natural posture',
+      sweet: 'with clean youthful Korean-style charm, gentle refined features, relaxed natural poise, mouth closed, closed lips, calm subtle gaze',
+      athletic: 'with an athletic toned build, sharp defined features, calm focused expression, mouth closed, closed lips, and upright confident posture',
+      mature: 'with distinguished executive poise, mature handsome features, mouth closed, closed lips, and upright commanding posture',
+      cool: 'with a modern streetwear edge, cool understated attitude, mouth closed, closed lips, and upright confident posture'
+    }
+  };
+
+  function loadStoredStylePrompts() {
+    try {
+      const raw = localStorage.getItem(STYLE_PROMPTS_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveStoredStylePrompts(data) {
+    try {
+      localStorage.setItem(STYLE_PROMPTS_KEY, JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  function getStylePromptKey(gender, style) {
+    const g = gender === 'male' ? 'male' : 'female';
+    const s = style || 'classic';
+    return `${g}_${s}`;
+  }
+
+  function getEffectiveStylePrompt(gender, style) {
+    const g = gender === 'male' ? 'male' : 'female';
+    const s = style || 'classic';
+    const stored = loadStoredStylePrompts();
+    const key = getStylePromptKey(g, s);
+    if (typeof stored[key] === 'string' && stored[key].trim() !== '') {
+      return stored[key];
+    }
+    return DEFAULT_STYLE_PROMPTS[g]?.[s] || DEFAULT_STYLE_PROMPTS.female.classic;
+  }
+
+  function setEffectiveStylePrompt(gender, style, promptVal) {
+    const g = gender === 'male' ? 'male' : 'female';
+    const s = style || 'classic';
+    const stored = loadStoredStylePrompts();
+    const key = getStylePromptKey(g, s);
+    stored[key] = promptVal;
+    saveStoredStylePrompts(stored);
+  }
+
+  function resetEffectiveStylePrompt(gender, style) {
+    const g = gender === 'male' ? 'male' : 'female';
+    const s = style || 'classic';
+    const stored = loadStoredStylePrompts();
+    const key = getStylePromptKey(g, s);
+    delete stored[key];
+    saveStoredStylePrompts(stored);
+    return DEFAULT_STYLE_PROMPTS[g]?.[s] || DEFAULT_STYLE_PROMPTS.female.classic;
+  }
+
+  function updateModelStylePromptUI() {
+    if (!modelStylePromptInput) return;
+    const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
+    const modelStyle = document.querySelector('input[name="modelStyle"]:checked')?.value || 'classic';
+    modelStylePromptInput.value = getEffectiveStylePrompt(gender, modelStyle);
+  }
+
+  async function syncModelStylesFromServer() {
+    try {
+      const res = await fetch('/api/model-styles');
+      if (!res.ok) return;
+      const data = await res.json();
+      for (const [key, val] of Object.entries(data)) {
+        if (val.female) DEFAULT_STYLE_PROMPTS.female[key] = val.female;
+        if (val.male) DEFAULT_STYLE_PROMPTS.male[key] = val.male;
+      }
+      updateModelStylePromptUI();
+    } catch (e) {}
+  }
 
   // IndexedDB Helper with support for Garment, Model reference, and Scene reference
   function openStorageDB() {
@@ -299,6 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const el = document.querySelector(`input[name="modelStyle"][value="${opts.modelStyle}"]`);
       if (el) el.checked = true;
     }
+    updateModelStylePromptUI();
     if (opts.aspectRatio) {
       const el = document.querySelector(`input[name="aspectRatio"][value="${opts.aspectRatio}"]`);
       if (el) el.checked = true;
@@ -738,10 +832,32 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auto-save listeners for options and inputs
   document.querySelectorAll('input[type="radio"]').forEach(radio => {
     radio.addEventListener('change', () => {
+      if (radio.name === 'gender' || radio.name === 'modelStyle') {
+        updateModelStylePromptUI();
+      }
       saveUserOptions();
       updateBatchHint();
     });
   });
+  if (modelStylePromptInput) {
+    modelStylePromptInput.addEventListener('input', () => {
+      const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
+      const modelStyle = document.querySelector('input[name="modelStyle"]:checked')?.value || 'classic';
+      setEffectiveStylePrompt(gender, modelStyle, modelStylePromptInput.value);
+    });
+  }
+  if (btnResetStylePrompt) {
+    btnResetStylePrompt.addEventListener('click', (e) => {
+      e.preventDefault();
+      const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
+      const modelStyle = document.querySelector('input[name="modelStyle"]:checked')?.value || 'classic';
+      const defaultVal = resetEffectiveStylePrompt(gender, modelStyle);
+      if (modelStylePromptInput) {
+        modelStylePromptInput.value = defaultVal;
+      }
+      showToast('已恢复当前风格默认提示词');
+    });
+  }
   if (customPromptInput) {
     customPromptInput.addEventListener('input', saveUserOptions);
   }
@@ -830,6 +946,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
       const modelStyle = document.querySelector('input[name="modelStyle"]:checked')?.value || 'classic';
+      const modelStylePrompt = modelStylePromptInput ? modelStylePromptInput.value.trim() : '';
       const aspectRatio = document.querySelector('input[name="aspectRatio"]:checked')?.value || '3:4';
       const customPrompt = customPromptInput ? customPromptInput.value.trim() : '';
       const customScene = customSceneText ? customSceneText.value.trim() : '';
@@ -859,6 +976,7 @@ document.addEventListener('DOMContentLoaded', () => {
           custom_scene: selectedScene === 'custom' ? customScene : '',
           gender,
           model_style: modelStyle,
+          model_style_prompt: modelStylePrompt,
           custom_prompt: customPrompt,
           aspect_ratio: aspectRatio,
           mode: genMode
@@ -940,6 +1058,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
         const modelStyle = document.querySelector('input[name="modelStyle"]:checked')?.value || 'classic';
+        const modelStylePrompt = modelStylePromptInput ? modelStylePromptInput.value.trim() : '';
         const aspectRatio = document.querySelector('input[name="aspectRatio"]:checked')?.value || '3:4';
         const customPrompt = customPromptInput ? customPromptInput.value.trim() : '';
         const customScene = customSceneText ? customSceneText.value.trim() : '';
@@ -959,6 +1078,7 @@ document.addEventListener('DOMContentLoaded', () => {
             scenes: batchScenes,
             gender,
             model_style: modelStyle,
+            model_style_prompt: modelStylePrompt,
             custom_prompt: customPrompt,
             custom_scene: customScene,
             aspect_ratio: aspectRatio,
@@ -1620,9 +1740,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnRefreshHistory.addEventListener('click', loadHistory);
 
-  // App Initialization Sequence: restore options -> load scene cards -> check in-flight tasks -> load history
+  // App Initialization Sequence: restore options -> sync styles -> load scene cards -> check in-flight tasks -> load history
   (async () => {
     await restoreUserOptions();
+    await syncModelStylesFromServer();
+    updateModelStylePromptUI();
     await loadScenes();
     await checkActiveTaskOnLoad();
     loadHistory();
