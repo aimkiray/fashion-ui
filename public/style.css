@@ -857,6 +857,219 @@ kbd {
   background: rgba(0, 0, 0, 0.08);
 }
 
+/* ============ Prompt Inspector & Fine-Tuning ============ */
+
+.prompt-inspector-details {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: var(--transition);
+  margin-top: 14px;
+}
+
+.prompt-inspector-details:hover {
+  border-color: var(--border-hover, #444);
+}
+
+.prompt-inspector-details[open] {
+  border-color: var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.prompt-inspector-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s ease, color 0.2s ease;
+  list-style: none;
+}
+
+.prompt-inspector-summary::-webkit-details-marker {
+  display: none;
+}
+
+.prompt-inspector-summary:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.prompt-inspector-summary .summary-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prompt-inspector-summary .summary-left i {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.prompt-inspector-summary .summary-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prompt-inspector-summary .summary-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.prompt-inspector-summary .summary-caret {
+  font-size: 13px;
+  color: var(--text-muted);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.prompt-inspector-details[open] .summary-caret {
+  transform: rotate(180deg);
+  color: var(--accent);
+}
+
+.inspector-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  font-weight: 600;
+  line-height: 1.2;
+  transition: var(--transition);
+}
+
+.inspector-badge.modified {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+
+.prompt-inspector-body {
+  padding: 12px 14px 16px;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.inspector-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.inspector-info {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.inspector-info i {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.btn-reset-inspector {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  transition: var(--transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-reset-inspector:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.inspector-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inspector-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.inspector-field-header label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.inspector-field-header label i {
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.inspector-field-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.inspector-field-badge.modified {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.inspector-textarea {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  resize: vertical;
+  min-height: 95px;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.inspector-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.inspector-textarea.modified {
+  border-color: var(--accent-border, rgba(200, 160, 100, 0.4));
+}
+
 .style-prompt-box {
   margin-top: 10px;
   background: var(--surface);

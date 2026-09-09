@@ -18,6 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let startTime = null;
   let dragCounter = 0;
   let userAudioMuted = false;
+  let isPromptsCustomModified = false;
+  let inspectorDebounceTimer = null;
+  let cachedAutoPrompts = { krea_prompt: '', seg1_prompt: '', seg2_prompt: '' };
 
   // DOM Elements - Garment Upload
   const dropzone = document.getElementById('dropzone');
@@ -51,6 +54,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const customPromptInput = document.getElementById('customPrompt');
   const btnGenerate = document.getElementById('btnGenerate');
   const btnGenerateBatch = document.getElementById('btnGenerateBatch');
+
+  // DOM Elements - Prompt Inspector & Fine-Tuning
+  const promptInspectorDetails = document.getElementById('promptInspectorDetails');
+  const inspectorBadge = document.getElementById('inspectorBadge');
+  const btnResetPrompts = document.getElementById('btnResetPrompts');
+  const inspectorKreaPrompt = document.getElementById('inspectorKreaPrompt');
+  const inspectorSeg1Prompt = document.getElementById('inspectorSeg1Prompt');
+  const inspectorSeg2Prompt = document.getElementById('inspectorSeg2Prompt');
+  const badgeKreaPrompt = document.getElementById('badgeKreaPrompt');
+  const badgeSeg1Prompt = document.getElementById('badgeSeg1Prompt');
+  const badgeSeg2Prompt = document.getElementById('badgeSeg2Prompt');
 
   // DOM Elements - Progress & Status
   const progressCard = document.getElementById('progressCard');
@@ -576,6 +590,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           saveUserOptions();
           updateBatchHint();
+          queueRefreshPromptInspector();
         });
         sceneGrid.appendChild(card);
       });
@@ -611,6 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       showToast(`已应用场景灵感: ${tagLabel}`);
       saveUserOptions();
+      queueRefreshPromptInspector();
     });
   });
 
@@ -732,10 +748,12 @@ document.addEventListener('DOMContentLoaded', () => {
     onFileSet: (file) => {
       uploadedModelFile = file;
       showToast('已上传模特主角参考图，将提取面容与发型融合。');
+      queueRefreshPromptInspector();
     },
     onFileClear: () => {
       uploadedModelFile = null;
       showToast('已清除模特参考图，将按下方配置生成模特。');
+      queueRefreshPromptInspector();
     }
   });
 
@@ -751,10 +769,12 @@ document.addEventListener('DOMContentLoaded', () => {
     onFileSet: (file) => {
       uploadedSceneFile = file;
       showToast('已上传场景背景参考图。');
+      queueRefreshPromptInspector();
     },
     onFileClear: () => {
       uploadedSceneFile = null;
       showToast('已清除场景背景参考图。');
+      queueRefreshPromptInspector();
     }
   });
 
@@ -847,6 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
       customPromptInput.focus();
       updateCustomPromptBadge();
       saveUserOptions();
+      queueRefreshPromptInspector();
     });
   });
 
@@ -858,6 +879,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       saveUserOptions();
       updateBatchHint();
+      queueRefreshPromptInspector();
     });
   });
   if (modelStylePromptInput) {
@@ -865,6 +887,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
       const modelStyle = document.querySelector('input[name="modelStyle"]:checked')?.value || 'classic';
       setEffectiveStylePrompt(gender, modelStyle, modelStylePromptInput.value);
+      queueRefreshPromptInspector();
     });
   }
   if (btnResetStylePrompt) {
@@ -877,16 +900,147 @@ document.addEventListener('DOMContentLoaded', () => {
         modelStylePromptInput.value = defaultVal;
       }
       showToast('已恢复当前风格默认提示词');
+      queueRefreshPromptInspector();
     });
   }
   if (customPromptInput) {
     customPromptInput.addEventListener('input', () => {
       updateCustomPromptBadge();
       saveUserOptions();
+      queueRefreshPromptInspector();
     });
   }
   if (customSceneText) {
-    customSceneText.addEventListener('input', saveUserOptions);
+    customSceneText.addEventListener('input', () => {
+      saveUserOptions();
+      queueRefreshPromptInspector();
+    });
+  }
+
+  // -------------------------------------------------------------
+  // Prompt Inspector & Fine-Tuning Controller
+  // -------------------------------------------------------------
+  async function refreshPromptInspector(force = false) {
+    if (!inspectorKreaPrompt || !inspectorSeg1Prompt || !inspectorSeg2Prompt) return;
+
+    // If user has customized prompts and force is false, keep user edits intact
+    if (isPromptsCustomModified && !force) {
+      return;
+    }
+
+    try {
+      const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
+      const modelStyle = document.querySelector('input[name="modelStyle"]:checked')?.value || 'classic';
+      const modelStylePrompt = modelStylePromptInput ? modelStylePromptInput.value.trim() : '';
+      const customPrompt = customPromptInput ? customPromptInput.value.trim() : '';
+      const customScene = customSceneText ? customSceneText.value.trim() : '';
+      const hasModelImg = Boolean(uploadedModelFile);
+      const hasSceneImg = Boolean(uploadedSceneFile && selectedScene === 'custom');
+
+      const res = await fetch('/api/preview-prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scene: selectedScene,
+          gender,
+          model_style: modelStyle,
+          model_style_prompt: modelStylePrompt,
+          custom_scene: selectedScene === 'custom' ? customScene : '',
+          custom_prompt: customPrompt,
+          model_image: hasModelImg ? 'placeholder_model.png' : null,
+          scene_image: hasSceneImg ? 'placeholder_scene.png' : null
+        })
+      });
+
+      if (!res.ok) return;
+      const data = await res.json();
+      cachedAutoPrompts = { ...data };
+
+      if (!isPromptsCustomModified || force) {
+        inspectorKreaPrompt.value = data.krea_prompt || '';
+        inspectorSeg1Prompt.value = data.seg1_prompt || '';
+        inspectorSeg2Prompt.value = data.seg2_prompt || '';
+
+        if (force) {
+          isPromptsCustomModified = false;
+        }
+        updatePromptInspectorBadges();
+      }
+    } catch (err) {
+      console.warn('Failed to preview prompts:', err);
+    }
+  }
+
+  function queueRefreshPromptInspector() {
+    if (inspectorDebounceTimer) clearTimeout(inspectorDebounceTimer);
+    inspectorDebounceTimer = setTimeout(() => {
+      refreshPromptInspector(false);
+    }, 200);
+  }
+
+  function updatePromptInspectorBadges() {
+    const kreaVal = inspectorKreaPrompt ? inspectorKreaPrompt.value.trim() : '';
+    const seg1Val = inspectorSeg1Prompt ? inspectorSeg1Prompt.value.trim() : '';
+    const seg2Val = inspectorSeg2Prompt ? inspectorSeg2Prompt.value.trim() : '';
+
+    const kreaDiff = Boolean(kreaVal && kreaVal !== (cachedAutoPrompts.krea_prompt || '').trim());
+    const seg1Diff = Boolean(seg1Val && seg1Val !== (cachedAutoPrompts.seg1_prompt || '').trim());
+    const seg2Diff = Boolean(seg2Val && seg2Val !== (cachedAutoPrompts.seg2_prompt || '').trim());
+
+    isPromptsCustomModified = Boolean(kreaDiff || seg1Diff || seg2Diff);
+
+    if (inspectorBadge) {
+      if (isPromptsCustomModified) {
+        inspectorBadge.textContent = '已微调';
+        inspectorBadge.classList.add('modified');
+      } else {
+        inspectorBadge.textContent = '自动同步';
+        inspectorBadge.classList.remove('modified');
+      }
+    }
+
+    if (badgeKreaPrompt) {
+      badgeKreaPrompt.textContent = kreaDiff ? '已微调' : '自动';
+      badgeKreaPrompt.classList.toggle('modified', kreaDiff);
+    }
+    if (badgeSeg1Prompt) {
+      badgeSeg1Prompt.textContent = seg1Diff ? '已微调' : '自动';
+      badgeSeg1Prompt.classList.toggle('modified', seg1Diff);
+    }
+    if (badgeSeg2Prompt) {
+      badgeSeg2Prompt.textContent = seg2Diff ? '已微调' : '自动';
+      badgeSeg2Prompt.classList.toggle('modified', seg2Diff);
+    }
+
+    if (inspectorKreaPrompt) inspectorKreaPrompt.classList.toggle('modified', kreaDiff);
+    if (inspectorSeg1Prompt) inspectorSeg1Prompt.classList.toggle('modified', seg1Diff);
+    if (inspectorSeg2Prompt) inspectorSeg2Prompt.classList.toggle('modified', seg2Diff);
+  }
+
+  if (inspectorKreaPrompt) {
+    inspectorKreaPrompt.addEventListener('input', updatePromptInspectorBadges);
+  }
+  if (inspectorSeg1Prompt) {
+    inspectorSeg1Prompt.addEventListener('input', updatePromptInspectorBadges);
+  }
+  if (inspectorSeg2Prompt) {
+    inspectorSeg2Prompt.addEventListener('input', updatePromptInspectorBadges);
+  }
+
+  if (btnResetPrompts) {
+    btnResetPrompts.addEventListener('click', (e) => {
+      e.preventDefault();
+      refreshPromptInspector(true);
+      showToast('已恢复底层提示词自动同步');
+    });
+  }
+
+  if (promptInspectorDetails) {
+    promptInspectorDetails.addEventListener('toggle', () => {
+      if (promptInspectorDetails.open && (!inspectorKreaPrompt.value || !inspectorSeg1Prompt.value)) {
+        refreshPromptInspector(false);
+      }
+    });
   }
 
   function setButtonsDisabled(disabled) {
@@ -1003,7 +1157,10 @@ document.addEventListener('DOMContentLoaded', () => {
           model_style_prompt: modelStylePrompt,
           custom_prompt: customPrompt,
           aspect_ratio: aspectRatio,
-          mode: genMode
+          mode: genMode,
+          krea_prompt: isPromptsCustomModified ? inspectorKreaPrompt.value : null,
+          seg1_prompt: isPromptsCustomModified ? inspectorSeg1Prompt.value : null,
+          seg2_prompt: isPromptsCustomModified ? inspectorSeg2Prompt.value : null
         })
       });
       let genData;
@@ -1106,7 +1263,10 @@ document.addEventListener('DOMContentLoaded', () => {
             custom_prompt: customPrompt,
             custom_scene: customScene,
             aspect_ratio: aspectRatio,
-            mode: genMode
+            mode: genMode,
+            krea_prompt: isPromptsCustomModified ? inspectorKreaPrompt.value : null,
+            seg1_prompt: isPromptsCustomModified ? inspectorSeg1Prompt.value : null,
+            seg2_prompt: isPromptsCustomModified ? inspectorSeg2Prompt.value : null
           })
         });
         let batchResp;
@@ -1772,5 +1932,6 @@ document.addEventListener('DOMContentLoaded', () => {
     await loadScenes();
     await checkActiveTaskOnLoad();
     loadHistory();
+    await refreshPromptInspector(true);
   })();
 });

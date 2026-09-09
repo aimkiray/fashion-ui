@@ -285,6 +285,76 @@
               </div>
             </details>
           </div>
+
+          <!-- Prompt Inspector & Fine-Tuning (Collapsible, Default Folded) -->
+          <div class="option-group prompt-inspector-group">
+            <details class="prompt-inspector-details" id="promptInspectorDetails">
+              <summary class="prompt-inspector-summary">
+                <div class="summary-left">
+                  <i class="ph ph-code"></i>
+                  <span class="summary-title">底层完整提示词预览与微调 (Prompt Inspector)</span>
+                  <span class="inspector-badge" id="inspectorBadge">自动同步</span>
+                </div>
+                <div class="summary-right">
+                  <span class="summary-hint">可微调</span>
+                  <i class="ph ph-caret-down summary-caret"></i>
+                </div>
+              </summary>
+              <div class="prompt-inspector-body">
+                <div class="inspector-toolbar">
+                  <span class="inspector-info"><i class="ph ph-info"></i> 随上方场景/模特/个性化选项实时生成，支持直接微调覆盖：</span>
+                  <button type="button" class="btn-reset-inspector" id="btnResetPrompts" title="清空手动微调，重新跟随上方选项实时生成">
+                    <i class="ph ph-arrow-counter-clockwise"></i> 恢复自动生成
+                  </button>
+                </div>
+
+                <div class="inspector-field">
+                  <div class="inspector-field-header">
+                    <label for="inspectorKreaPrompt">
+                      <i class="ph ph-camera"></i>
+                      <span>阶段一：Krea-2 试衣定妆照生图提示词</span>
+                    </label>
+                    <span class="inspector-field-badge" id="badgeKreaPrompt">自动</span>
+                  </div>
+                  <textarea
+                    id="inspectorKreaPrompt"
+                    class="inspector-textarea"
+                    rows="6"
+                    placeholder="加载底层提示词中..."></textarea>
+                </div>
+
+                <div class="inspector-field">
+                  <div class="inspector-field-header">
+                    <label for="inspectorSeg1Prompt">
+                      <i class="ph ph-video-camera"></i>
+                      <span>阶段二：MiniMax H3 分镜一 (5秒迎面走姿 + 空间音效)</span>
+                    </label>
+                    <span class="inspector-field-badge" id="badgeSeg1Prompt">自动</span>
+                  </div>
+                  <textarea
+                    id="inspectorSeg1Prompt"
+                    class="inspector-textarea"
+                    rows="6"
+                    placeholder="加载底层提示词中..."></textarea>
+                </div>
+
+                <div class="inspector-field">
+                  <div class="inspector-field-header">
+                    <label for="inspectorSeg2Prompt">
+                      <i class="ph ph-arrows-clockwise"></i>
+                      <span>阶段二：MiniMax H3 分镜二 (5秒45°转体 + 空间音效)</span>
+                    </label>
+                    <span class="inspector-field-badge" id="badgeSeg2Prompt">自动</span>
+                  </div>
+                  <textarea
+                    id="inspectorSeg2Prompt"
+                    class="inspector-textarea"
+                    rows="6"
+                    placeholder="加载底层提示词中..."></textarea>
+                </div>
+              </div>
+            </details>
+          </div>
         </div>
 
         <!-- Action Buttons (Single & Batch) -->

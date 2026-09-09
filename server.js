@@ -335,6 +335,68 @@ const SCENES = {
   }
 };
 
+// Format multiline textbox input: strip list bullets at line starts only
+// (keep hyphens inside words like "t-shirt"), collapse lines, block audio injection
+const stripTextboxNoise = (raw) => (raw || '')
+  .replace(/^[•·*\-]\s*/gm, '')
+  .replace(/\baudio\s*:/gi, '')
+  .replace(/露齿笑|露牙笑|露齿|大笑|狂笑|张嘴笑/g, '闭唇从容神采')
+  .replace(/\b(toothy smile|open mouth|grinning|laughing|showing teeth)\b/gi, 'closed lips, serene expression')
+  .replace(/\b(8k resolution|8k|hyperrealistic|photorealistic|ultra sharp focus|ultra sharp|pristine|flawless|stunning|cinematic|glamorous|radiant|shimmering|over-sharpened)\b/gi, '')
+  .replace(/\r\n|\r|\n/g, ', ')
+  .replace(/\s+/g, ' ')
+  .replace(/[,，\s]+[,，]/g, ', ')
+  .replace(/^[,，\s]+|[,，\s]+$/g, '')
+  .trim();
+
+// Centralized authoritative prompt computation for preview and execution
+function computeTaskPrompts({
+  scene = 'street',
+  gender = 'female',
+  model_style = 'classic',
+  model_style_prompt = '',
+  custom_scene = '',
+  custom_prompt = '',
+  model_image = null,
+  scene_image = null
+} = {}) {
+  const modelStyleKey = MODEL_STYLES[model_style] ? model_style : 'classic';
+  const sceneConfig = SCENES[scene] || SCENES.street;
+  const isM = gender === 'male';
+
+  const cleanCustom = stripTextboxNoise(custom_prompt);
+  const cleanCustomScene = stripTextboxNoise(custom_scene);
+  const cleanCustomModelStyle = stripTextboxNoise(model_style_prompt);
+
+  const prompts = sceneConfig.buildPrompts(
+    gender,
+    cleanCustom,
+    cleanCustomScene,
+    modelStyleKey,
+    cleanCustomModelStyle
+  );
+
+  let kreaPrompt = prompts.krea_prompt;
+
+  if (model_image) {
+    const customEnvPreposition = /^(in|on|at|against|under|near|along)\s+/i.test(cleanCustomScene) ? '' : 'in ';
+    const sceneEnv = (sceneConfig.id === 'custom' && cleanCustomScene)
+      ? `${customEnvPreposition}${cleanCustomScene}, realistic lighting consistent with the environment`
+      : (sceneConfig.sceneEnvironment || 'in an aesthetic fashion lookbook background, natural commercial lighting');
+    const modelGenderLabel = isM ? 'male model' : 'female model';
+    kreaPrompt = `Create a 9:16 photorealistic vintage editorial portrait. Transfer the clothing and outfit from the first reference image onto the ${modelGenderLabel} in the second reference image, strictly preserving their exact facial features, facial identity, eye shape, nose shape, and hairstyle, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${isM ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling, standing ${sceneEnv}. Full body vintage editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Soft direct eye contact with warm genuine presence, serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic lighting consistent with the environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
+  } else if (scene_image) {
+    const subj = styledSubject(gender, modelStyleKey, 'stylish female model', 'handsome male model', cleanCustomModelStyle);
+    kreaPrompt = `Create a 9:16 photorealistic vintage editorial portrait of ${subj} standing full-length in the background environment from the first reference image, wearing the exact clothing and outfit from the second reference image, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${isM ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling. Soft direct eye contact with warm genuine presence, face angle natural and alive. Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Full body vintage editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic illumination matched to the background environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
+  }
+
+  return {
+    krea_prompt: kreaPrompt,
+    seg1_prompt: prompts.seg1_prompt,
+    seg2_prompt: prompts.seg2_prompt
+  };
+}
+
 // Global task store with auto-cleanup (prevent memory leak)
 const tasks = new Map();
 const batchJobs = new Map();
@@ -539,6 +601,37 @@ app.get('/api/model-styles', (req, res) => {
   res.json(MODEL_STYLES);
 });
 
+// Endpoint for frontend to preview authoritative underlying prompts for inspection and fine-tuning
+app.post('/api/preview-prompts', (req, res) => {
+  try {
+    const {
+      scene = 'street',
+      gender = 'female',
+      model_style = 'classic',
+      model_style_prompt = '',
+      custom_scene = '',
+      custom_prompt = '',
+      model_image = null,
+      scene_image = null
+    } = req.body || {};
+
+    const prompts = computeTaskPrompts({
+      scene,
+      gender,
+      model_style,
+      model_style_prompt,
+      custom_scene,
+      custom_prompt,
+      model_image,
+      scene_image
+    });
+
+    res.json(prompts);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/upload', (req, res) => {
   upload.single('image')(req, res, (err) => {
     if (err) {
@@ -569,7 +662,10 @@ app.post('/api/generate', async (req, res) => {
     model_style_prompt = '',
     custom_prompt = '',
     aspect_ratio = '3:4',
-    mode = 'video'
+    mode = 'video',
+    krea_prompt = null,
+    seg1_prompt = null,
+    seg2_prompt = null
   } = req.body;
 
   if (!image) {
@@ -605,6 +701,9 @@ app.post('/api/generate', async (req, res) => {
     model_style_prompt: typeof model_style_prompt === 'string' ? model_style_prompt.trim() : '',
     custom_scene: isCustomScene ? custom_scene : '',
     custom_prompt,
+    custom_krea_prompt: typeof krea_prompt === 'string' && krea_prompt.trim() ? krea_prompt.trim() : null,
+    custom_seg1_prompt: typeof seg1_prompt === 'string' && seg1_prompt.trim() ? seg1_prompt.trim() : null,
+    custom_seg2_prompt: typeof seg2_prompt === 'string' && seg2_prompt.trim() ? seg2_prompt.trim() : null,
     aspect_ratio,
     image: sanitizedImage,
     model_image: sanitizedModelImage,
@@ -666,7 +765,10 @@ app.post('/api/generate-batch', async (req, res) => {
     custom_prompt = '',
     custom_scene = '',
     aspect_ratio = '3:4',
-    mode = 'video'
+    mode = 'video',
+    krea_prompt = null,
+    seg1_prompt = null,
+    seg2_prompt = null
   } = req.body;
 
   if (!image) {
@@ -701,6 +803,9 @@ app.post('/api/generate-batch', async (req, res) => {
       model_style_prompt: typeof model_style_prompt === 'string' ? model_style_prompt.trim() : '',
       custom_scene: scKey === 'custom' ? custom_scene : '',
       custom_prompt,
+      custom_krea_prompt: typeof krea_prompt === 'string' && krea_prompt.trim() ? krea_prompt.trim() : null,
+      custom_seg1_prompt: typeof seg1_prompt === 'string' && seg1_prompt.trim() ? seg1_prompt.trim() : null,
+      custom_seg2_prompt: typeof seg2_prompt === 'string' && seg2_prompt.trim() ? seg2_prompt.trim() : null,
       aspect_ratio,
       image: sanitizedImage,
       model_image: sanitizedModelImage,
@@ -868,25 +973,21 @@ async function runGenerationJob(taskId) {
     throw new Error('Required workflow JSON templates not found on server.');
   }
 
-  // Format multiline textbox input: strip list bullets at line starts only
-  // (keep hyphens inside words like "t-shirt"), collapse lines, block audio injection
-  const stripTextboxNoise = (raw) => (raw || '')
-    .replace(/^[•·*\-]\s*/gm, '')
-    .replace(/\baudio\s*:/gi, '')
-    .replace(/露齿笑|露牙笑|露齿|大笑|狂笑|张嘴笑/g, '闭唇从容神采')
-    .replace(/\b(toothy smile|open mouth|grinning|laughing|showing teeth)\b/gi, 'closed lips, serene expression')
-    .replace(/\b(8k resolution|8k|hyperrealistic|photorealistic|ultra sharp focus|ultra sharp|pristine|flawless|stunning|cinematic|glamorous|radiant|shimmering|over-sharpened)\b/gi, '')
-    .replace(/\r\n|\r|\n/g, ', ')
-    .replace(/\s+/g, ' ')
-    .replace(/[,，\s]+[,，]/g, ', ')
-    .replace(/^[,，\s]+|[,，\s]+$/g, '')
-    .trim();
-
-  const cleanCustom = stripTextboxNoise(task.custom_prompt);
   const cleanCustomScene = stripTextboxNoise(task.custom_scene);
-  const cleanCustomModelStyle = stripTextboxNoise(task.model_style_prompt);
+  const autoPrompts = computeTaskPrompts({
+    scene: task.scene.id,
+    gender: task.gender,
+    model_style: task.model_style,
+    model_style_prompt: task.model_style_prompt,
+    custom_scene: task.custom_scene,
+    custom_prompt: task.custom_prompt,
+    model_image: task.model_image,
+    scene_image: task.scene_image
+  });
 
-  const prompts = task.scene.buildPrompts(task.gender, cleanCustom, cleanCustomScene, task.model_style || 'classic', cleanCustomModelStyle);
+  const finalKreaPrompt = (task.custom_krea_prompt && task.custom_krea_prompt.trim()) || autoPrompts.krea_prompt;
+  const finalSeg1Prompt = (task.custom_seg1_prompt && task.custom_seg1_prompt.trim()) || autoPrompts.seg1_prompt;
+  const finalSeg2Prompt = (task.custom_seg2_prompt && task.custom_seg2_prompt.trim()) || autoPrompts.seg2_prompt;
 
   const sceneDisplayName = task.scene.id === 'custom'
     ? (cleanCustomScene ? `自定义场景: ${cleanCustomScene.slice(0, 16)}` : '自定义专属场景')
@@ -930,7 +1031,7 @@ async function runGenerationJob(taskId) {
     const kreaWf = JSON.parse(fs.readFileSync(kreaWfPath, 'utf-8'));
     requireNodes(kreaWf, 'Krea-2', ['5', '7', '9', '11', '13']);
     kreaWf['5']['inputs']['image'] = `online_temp/${tempInputFile}`;
-    kreaWf['9']['inputs']['prompt'] = prompts.krea_prompt;
+    kreaWf['9']['inputs']['prompt'] = finalKreaPrompt;
     // Guide the vision encoder to focus on identity, skin texture, and garment details
     // instead of generic background description. Empty falls back to the training default.
     if (kreaWf['9']) {
@@ -1010,12 +1111,7 @@ async function runGenerationJob(taskId) {
           kreaWf['10']['inputs']['grounding_px'] = 1024;
         }
 
-        const customEnvPreposition = /^(in|on|at|against|under|near|along)\s+/i.test(cleanCustomScene) ? '' : 'in ';
-        const sceneEnv = (task.scene.id === 'custom' && cleanCustomScene)
-          ? `${customEnvPreposition}${cleanCustomScene}, realistic lighting consistent with the environment`
-          : (task.scene.sceneEnvironment || 'in an aesthetic fashion lookbook background, natural commercial lighting');
-        const modelGenderLabel = task.gender === 'male' ? 'male model' : 'female model';
-        kreaWf['9']['inputs']['prompt'] = `Create a 9:16 photorealistic vintage editorial portrait. Transfer the clothing and outfit from the first reference image onto the ${modelGenderLabel} in the second reference image, strictly preserving their exact facial features, facial identity, eye shape, nose shape, and hairstyle, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${modelGenderLabel === 'male model' ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling, standing ${sceneEnv}. Full body vintage editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Soft direct eye contact with warm genuine presence, serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic lighting consistent with the environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
+        kreaWf['9']['inputs']['prompt'] = finalKreaPrompt;
       }
     } else if (task.scene_image) {
       const srcScenePath = path.join(PROJECT_INPUT_DIR, task.scene_image);
@@ -1046,8 +1142,7 @@ async function runGenerationJob(taskId) {
           kreaWf['10']['inputs']['grounding_px'] = 1024;
         }
 
-        const subj = styledSubject(task.gender, task.model_style || 'classic', 'stylish female model', 'handsome male model', cleanCustomModelStyle);
-        kreaWf['9']['inputs']['prompt'] = `Create a 9:16 photorealistic vintage editorial portrait of ${subj} standing full-length in the background environment from the first reference image, wearing the exact clothing and outfit from the second reference image, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${isM ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling. Soft direct eye contact with warm genuine presence, face angle natural and alive. Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Full body vintage editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic illumination matched to the background environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
+        kreaWf['9']['inputs']['prompt'] = finalKreaPrompt;
       }
     }
     kreaWf['11']['inputs']['seed'] = randomSeed();
@@ -1122,8 +1217,8 @@ async function runGenerationJob(taskId) {
     h3Wf['41']['inputs']['noise_seed'] = randomSeed();
     h3Wf['84']['inputs']['noise_seed'] = randomSeed();
 
-    h3Wf['40']['inputs']['prompt'] = prompts.seg1_prompt;
-    h3Wf['81']['inputs']['prompt'] = prompts.seg2_prompt;
+    h3Wf['40']['inputs']['prompt'] = finalSeg1Prompt;
+    h3Wf['81']['inputs']['prompt'] = finalSeg2Prompt;
 
     const videoPrefix = `online_temp/outfit_${task.scene.id}_10s_${taskId}`;
     h3Wf['80']['inputs']['filename_prefix'] = videoPrefix;
