@@ -28,7 +28,7 @@
         0
       ],
       "lora_name": "krea_outfittransfer.safetensors",
-      "strength_model": 1.0
+      "strength_model": 0.92
     }
   },
   "5": {
@@ -82,7 +82,7 @@
         0
       ],
       "fit_mode": "fit",
-      "ref_boost": 1.0
+      "ref_boost": 0.96
     }
   },
   "9": {
@@ -96,8 +96,8 @@
         "5",
         0
       ],
-      "prompt": "a professional fashion model walking on a sunny city street, transfer the outfit, full body commercial lookbook photography, elegant posture, 8k resolution",
-      "grounding_px": 768
+      "prompt": "a professional fashion model walking on a sunny city street, transfer the outfit, full body commercial lookbook photography, elegant posture, authentic skin texture",
+      "grounding_px": 1024
     }
   },
   "10": {
@@ -111,8 +111,8 @@
         "5",
         0
       ],
-      "prompt": "blurry, low quality, distorted, extra limbs, bad anatomy, deformed",
-      "grounding_px": 768
+      "prompt": "plastic skin, waxy skin, airbrushed, mannequin, 3d render, cgi, over-smoothed skin, doll, ceramic skin, beauty filter, oversaturated, wax figure, artificial sheen, illustration, cartoon, blurry, low quality, distorted, extra limbs, bad anatomy, deformed",
+      "grounding_px": 1024
     }
   },
   "11": {
