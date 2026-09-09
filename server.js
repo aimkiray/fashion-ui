@@ -6,6 +6,8 @@ const path = require('path');
 const WebSocket = require('ws');
 const { randomUUID: uuidv4 } = require('crypto');
 const os = require('os');
+const { getSafeConfig, saveConfig, testOpenAiConnection } = require('./services/config');
+const { generateReferenceImage } = require('./services/imagegen');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -138,66 +140,160 @@ function looksLikeImage(filePath) {
 }
 
 // Scene Presets
-// Model style presets — editorial presence with composed expression, natural skin and hair,
-// gaze/face angle kept scene-specific to avoid conflicts (scenes own the eye-contact wording).
+// Model style presets — 9 differentiated signatures (bone structure / skin / hair /
+// gaze quality / posture). Gaze DIRECTION and face angle stay scene-specific;
+// modifiers only carry gaze quality, never where the model looks.
 const MODEL_STYLES = {
   classic: {
     name: '高级名模',
-    female: 'with poised editorial elegance, serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair, and effortless upright lookbook posture',
-    male: 'with sharp defined jawline, editorial charisma, calm composed expression, naturally closed lips without tension, relaxed natural jawline, and upright natural posture'
+    female: 'with sculpted high-fashion supermodel presence, poised regal bearing, composed magnetic gaze, naturally closed lips without tension, and effortless commanding runway posture',
+    male: 'with high-fashion supermodel charisma, composed magnetic gaze, naturally closed lips without tension, and commanding runway posture'
   },
   sweet: {
     name: '甜美清新',
-    female: 'with fresh-faced youthful purity, gentle genuine warmth in the eyes, soft natural undone hair, tranquil poise, naturally closed lips without tension, and a tender serene presence',
-    male: 'with clean youthful Korean-style charm, gentle refined features, relaxed natural poise, naturally closed lips without tension, and calm subtle warmth'
+    female: 'with sweet youthful charm, bright sparkling eyes full of gentle warmth, dewy fresh skin, naturally closed lips with a faint serene tenderness, and graceful airy posture',
+    male: 'with clean boyish charm, soft warm eye expression, fresh dewy skin, naturally closed lips without tension, and light approachable posture'
   },
   athletic: {
     name: '运动活力',
-    female: 'with a healthy athletic glow, tone-defined posture, calm focused expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair, and a confident grounded stance',
-    male: 'with an athletic toned build, sharp defined facial structure, calm composed expression, naturally closed lips without tension, and an upright confident stance'
+    female: 'with healthy athletic vitality, sun-kissed glowing skin and toned posture, bright focused determined eyes, naturally closed lips with composed confidence, and grounded energetic stance',
+    male: 'with athletic vigor, toned build and sun-kissed skin, sharp focused gaze, naturally closed lips without tension, and upright powerful stance'
   },
   mature: {
     name: '成熟御姐',
-    female: 'with sophisticated graceful poise, refined mature facial structure, warm knowing presence, naturally closed lips without tension, relaxed natural jawline, soft natural hair, and commanding serene posture',
-    male: 'with distinguished mature charisma, sharp masculine features, calm composed expression, naturally closed lips without tension, and commanding executive posture'
+    female: 'with commanding mature elegance, knowing confident warmth in the eyes, luminous smooth skin, naturally closed lips with serene authority, and statuesque poised posture',
+    male: 'with distinguished executive presence, calm assured gaze, naturally closed lips without tension, and commanding confident posture'
   },
   cool: {
     name: '中性酷感',
-    female: 'with chic androgynous edge, cool understated attitude, sharp bone structure, naturally closed lips without tension, relaxed natural jawline, and effortless lookbook poise',
-    male: 'with contemporary streetwear edge, cool understated attitude, sharp jawline, naturally closed lips without tension, and effortless confident posture'
+    female: 'with chic androgynous edge, sharp minimal attitude, cool detached yet engaged gaze, naturally closed lips without tension, and effortless nonchalant posture',
+    male: 'with contemporary streetwear edge, understated cool attitude, naturally closed lips without tension, and relaxed confident posture'
+  },
+  youthful: {
+    name: '元气阳光',
+    female: 'with lively youthful energy, bright sparkling eyes radiating cheerful vitality, fresh glowing skin, naturally closed lips with a bright cheerful spirit, and light springy posture',
+    male: 'with sunny youthful energy, bright lively eyes and fresh open expression, glowing healthy skin, naturally closed lips without tension, and light energetic posture'
+  },
+  intellectual: {
+    name: '温柔知性',
+    female: 'with gentle intellectual grace, serene thoughtful eyes carrying quiet depth, soft minimal styling, clean natural makeup look, naturally closed lips with calm composure, and understated elegant posture',
+    male: 'with refined scholarly warmth, calm thoughtful gaze and gentle steady presence, clean minimal styling, naturally closed lips without tension, and composed graceful posture'
+  },
+  french: {
+    name: '法式浪漫',
+    female: 'with effortless Parisian chic, relaxed romantic air, naturally glowing minimal makeup, warm subtle gaze, naturally closed lips with serene charm, and breezy nonchalant elegance in posture',
+    male: 'with relaxed Parisian elegance, easygoing romantic air, warm understated gaze, naturally closed lips without tension, and breezy confident posture'
+  },
+  retro: {
+    name: '复古港风',
+    female: 'with 1990s Hong Kong cinematic glamour, luminous warm skin, magnetic star-quality gaze, naturally closed lips with poised mystique, and iconic timeless posture',
+    male: 'with 1990s Hong Kong cinematic charisma, luminous warm skin, magnetic film-star gaze, naturally closed lips without tension, and iconic screen-presence posture'
+  },
+  petite: {
+    name: '小巧可爱',
+    female: 'with petite adorable charm, small slim frame and fine-boned delicate figure, big bright expressive eyes, smooth dewy skin, naturally closed lips with playful cuteness, and cute perky posture',
+    male: 'with cute boyish charm, small lean frame, bright lively eyes, fresh clear skin, naturally closed lips without tension, and playful relaxed posture'
   }
 };
 
-// Scene-specific subject base + gender-aware style modifier.
-function styledSubject(gender, style, femaleBase, maleBase, customStylePrompt = null) {
+// 发型库：与模特风格、场景解耦的独立维度；男女各一条英文描述。
+const HAIRSTYLES = {
+  natural: { name: '长发披肩', female: 'soft natural long hair falling loosely over the shoulders', male: 'neat natural short hair' },
+  wavy: { name: '大波浪', female: 'long loose wavy hair with soft natural movement', male: 'short wavy textured hair' },
+  ponytail: { name: '高马尾', female: 'a high sleek ponytail', male: 'clean short hair swept back' },
+  bob: { name: '齐脖波波头', female: 'a fluffy chin-length bob', male: 'clean cropped short hair' },
+  bun: { name: '低盘发', female: 'a neat low bun updo', male: 'closely cropped short hair' },
+  pixie: { name: '利落短发', female: 'a sharp cropped pixie cut', male: 'a clean buzz-cut short hairstyle' }
+};
+
+// 脸型库：独立维度，男女各一条。
+const FACE_SHAPES = {
+  oval: { name: '鹅蛋脸', female: 'a soft balanced oval face', male: 'a balanced oval face' },
+  vline: { name: '小V脸', female: 'a slim tapered V-line face with a delicate chin', male: 'a sharp tapered V-line face' },
+  round: { name: '圆润脸', female: 'a soft rounded face with full cheeks', male: 'a softly rounded boyish face' },
+  square: { name: '立体方脸', female: 'a defined square-jaw face with clean bone structure', male: 'a chiseled square-jaw face' },
+  heart: { name: '心形脸', female: 'a heart-shaped face with a wide forehead and delicate pointed chin', male: 'a heart-shaped face with a tapered chin' },
+  long: { name: '清瘦长脸', female: 'a slender elongated face with high cheekbones', male: 'a lean long face with defined cheekbones' }
+};
+
+// Scene-specific subject base + gender-aware style modifier + independent hair/face dims.
+function styledSubject(gender, style, femaleBase, maleBase, customStylePrompt = null, hairKey = 'natural', faceKey = 'oval') {
   const isM = gender === 'male';
   const base = isM ? maleBase : femaleBase;
+  const g = isM ? 'male' : 'female';
+  const face = (FACE_SHAPES[faceKey] || FACE_SHAPES.oval)[g];
+  const hair = (HAIRSTYLES[hairKey] || HAIRSTYLES.natural)[g];
   if (customStylePrompt && typeof customStylePrompt === 'string' && customStylePrompt.trim()) {
     const trimmed = customStylePrompt.trim();
-    if (trimmed.startsWith(',') || trimmed.startsWith('with ')) {
-      return `${base} ${trimmed}`;
-    }
-    return `${base}, ${trimmed}`;
+    const head = trimmed.startsWith(',') || trimmed.startsWith('with ') ? base + ' ' + trimmed : base + ', ' + trimmed;
+    return head + ', ' + face + ', and ' + hair;
   }
   const s = MODEL_STYLES[style] || MODEL_STYLES.classic;
   const modifier = isM ? s.male : s.female;
-  return `${base} ${modifier}`;
+  const modBody = modifier.startsWith('with ') ? modifier.slice(5) : modifier;
+  return base + ' with ' + face + ', ' + modBody + ', and ' + hair;
 }
 
-// ---- H3 视频提示词骨架与场景配置 ----
-// 从生活感样例提炼的结构规律（非逐字套用）：
-//   身份锁定 → 秒级时间轴节拍 → 表情纪律（顺序分解+允许真实不完美+禁止项）
-//   → 真实人体动态（惯性/缓急）→ 服装与手部连续性 → 镜头纪律
-//   → 画面质感 → 去AI味黑名单 → 最终效果 → 音频。
-// 场景差异只写进 H3_SCENE_CFG，骨架统一维护。
+// ---- H3 视频提示词骨架、场景氛围与动作库 ----
+// 结构规律（从生活感样例提炼）：身份锁定 → 秒级时间轴节拍 → 表情纪律 →
+// 真实人体动态 → 服装与手部 → 镜头纪律 → 画面质感 → 去AI味黑名单 →
+// 最终效果 → 音频。
+// 场景（H3_SCENE_CFG）决定环境氛围与锁定清单；动作（H3_ACTIONS）决定编排节拍、
+// 视线、镜头与动作音效。每条动作=一段5秒编排，均为状态中立写法，
+// 分镜一/分镜二可自由组合；'random' 每次生成随机抽取，避免千篇一律。
 const H3_SCENE_CFG = {
   street: {
     title: '阳光都市街拍',
     lock: '服装与鞋履细节、街边建筑背景、自然日光、构图、镜头焦段和整体摄影质感',
     shot: '街拍摄影师跟拍',
-    seg1: {
-      beats: `0.00－1.50秒
-模特从首帧的站姿自然起步，沿洒满阳光的人行道迎面走向镜头。
+    ambience: '远处隐约的城市街道环境音'
+  },
+  studio: {
+    title: '极简纯色影棚',
+    lock: '服装与鞋履细节、纯色无影墙背景、柔光箱光线、构图、镜头焦段和整体摄影质感',
+    shot: '影棚摄影师掌机记录',
+    ambience: '安静的影棚房间底噪'
+  },
+  office: {
+    title: '摩天楼职场通勤',
+    lock: '服装与鞋履细节、现代玻璃幕墙大堂背景、晨光、构图、镜头焦段和整体摄影质感',
+    shot: '写字楼大堂内的跟拍',
+    ambience: '开阔的大堂空间环境音，轻微的声学混响'
+  },
+  boutique: {
+    title: '高端艺术买手店',
+    lock: '服装与鞋履细节、大理石与黄铜买手店背景、暖色射灯光线、构图、镜头焦段和整体摄影质感',
+    shot: '买手店内的跟拍',
+    ambience: '安静的精品店室内环境音，轻微的声学混响'
+  },
+  outdoor: {
+    title: '自然户外林荫',
+    lock: '服装与鞋履细节、公园林荫石板路背景、树影与自然光、构图、镜头焦段和整体摄影质感',
+    shot: '公园林荫里的跟拍',
+    ambience: '户外微风拂过树叶的沙沙声，远处隐约的鸟鸣'
+  },
+  cafe: {
+    title: '现代极简咖啡厅',
+    lock: '服装与鞋履细节、咖啡馆木质背景与落地窗、自然暖光、构图、镜头焦段和整体摄影质感',
+    shot: '咖啡馆里的跟拍',
+    ambience: '咖啡馆远处轻微的人声底噪，隐约的咖啡机蒸汽声'
+  },
+  custom: {
+    title: '自定义专属场景',
+    lock: '服装与鞋履细节、背景环境与光线氛围、构图、镜头焦段和整体摄影质感',
+    shot: '生活场景跟拍',
+    ambience: '与场景匹配的真实环境底噪'
+  }
+};
+
+// 动作库：每条动作 = 一段5秒编排。节拍为状态中立写法，可填进任意分镜。
+const H3_ACTIONS = {
+  walk: {
+    id: 'walk',
+    name: '迎面走姿',
+    description: '模特迎面走向镜头，步伐自然有惯性，适合展示全身穿搭与整体气质',
+    beats: `0.00－1.50秒
+模特从当前站位自然起步，在首帧场景中迎面走向镜头。
 起步自然：重心先微微前移，第一步不要突然迈大。
 她保持放松从容的状态，肩背舒展，眼神柔和地看向镜头。
 
@@ -210,15 +306,19 @@ const H3_SCENE_CFG = {
 3.80－5.00秒
 她走到离镜头较近的位置，微微放慢脚步，保持与镜头的柔和对视，全身始终完整在画面中。
 不是突然停住，也不是机械匀速，接近镜头时动作自然减速。`,
-      eye: '与镜头保持自然对视，头部带一点轻松的四分之三角度，眼神明亮而柔和。',
-      camera: '与模特视线等高的稳定后撤跟拍：镜头随模特同步平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要环绕，不要突然变焦。\n焦点稳定在模特的脸部和服装上，背景呈现真实柔和的街景虚化。\n不要焦点乱跳。',
-      recap: '她迎面自然走来，步伐真实有惯性，眼神与镜头自然交流，服装与街景与首帧完全一致，像真实街拍摄影师随手记录的一段生活瞬间。',
-      audio: '远处隐约的城市街道环境音，清晰有节奏的脚步声，衣物面料随步伐的轻微摆动声。'
-    },
-    seg2: {
-      beats: `0.00－1.50秒
-承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地踩实。
+    eye: '与镜头保持自然对视，头部带一点轻松的四分之三角度，眼神明亮而柔和。',
+    camera: '与模特视线等高的稳定后撤跟拍：镜头随模特同步平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要环绕，不要突然变焦。\n焦点稳定在模特的脸部和服装上，背景虚化与首帧一致。',
+    recap: '她迎面自然走来，步伐真实有惯性，眼神与镜头自然交流，服装与场景与首帧完全一致。',
+    sound: '清晰有节奏的脚步声，衣物面料随步伐的轻微摆动声'
+  },
+  turn45: {
+    id: 'turn45',
+    name: '45°转体展示',
+    description: '停步后45度转身展示服装侧面与背面细节，结尾回眸看镜头',
+    beats: `0.00－1.50秒
+模特自然放慢动作，平稳停下，双脚稳稳落地踩实。
 停步不是急刹车，而是像真实走秀结束那样带着惯性缓缓收住。
+她保持放松从容的状态，肩背舒展。
 
 1.50－3.20秒
 她以重心脚为轴，自然连贯地完成一个约45度的转身。
@@ -226,273 +326,95 @@ const H3_SCENE_CFG = {
 
 3.20－5.00秒
 转身后她稳定站定，展示服装的侧面与背面剪裁、面料垂感与缝线细节，随后自然回头看镜头，与镜头保持从容对视。`,
-      eye: '转身站定后回头看镜头，眼神自然先有注视，再带出一点柔和的笑意，不要突然切换表情。',
-      camera: '稳定的慢速横移：镜头以平稳慢速的横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦，不要环绕。\n焦点始终稳定在模特身上。',
-      recap: '她平稳停步、自然完成45度转身，服装细节清晰稳定，随后回头与镜头从容对视，整个动作一气呵成、真实自然。',
-      audio: '连续的城市街道环境音，鞋底在人行道上的轻轻转身摩擦声，衣物随转身的轻微摆动声。'
-    }
+    eye: '转身站定后回头看镜头，眼神自然先有注视，再带出一点柔和的笑意，不要突然切换表情。',
+    camera: '稳定的慢速横移：镜头以平稳慢速的横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦，不要环绕。\n焦点始终稳定在模特身上。',
+    recap: '她平稳停步、自然完成45度转身，服装细节清晰稳定，随后回头与镜头从容对视。',
+    sound: '鞋底轻轻的转身摩擦声，衣物随转身的轻微摆动声'
   },
-  studio: {
-    title: '极简纯色影棚',
-    lock: '服装与鞋履细节、纯色无影墙背景、柔光箱光线、构图、镜头焦段和整体摄影质感',
-    shot: '影棚摄影师掌机记录',
-    seg1: {
-      beats: `0.00－1.50秒
-模特从首帧的站姿自然起步，在影棚地面上迎面走向镜头。
-起步自然：重心先微微前移，第一步不要突然迈大。
-她保持放松从容的状态，肩背舒展，下颌微微收低，眼神柔和地抬起看向镜头。
-
-1.50－3.80秒
-她以稳定的节奏继续向前走，每秒约一步，步幅从容优雅。
-不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
-双臂在身体两侧自然摆动，手臂摆动与步伐自然交替。
-
-3.80－5.00秒
-她走到离镜头较近的位置，微微放慢脚步，保持安静亲切的对视，全身始终完整在画面中。
-接近镜头时动作自然减速，不要突然停住。`,
-      eye: '下颌微微收低，眼神轻轻抬起与镜头对视，安静、亲切、有张力。',
-      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，无影墙背景保持干净一致的柔光。',
-      recap: '她在纯色影棚中迎面自然走来，步伐真实有惯性，安静亲切的眼神与镜头交流，服装与影棚背景与首帧完全一致。',
-      audio: '安静的影棚房间底噪，轻柔有节奏的脚步声，衣料随步伐的细微摩擦声。'
-    },
-    seg2: {
-      beats: `0.00－1.50秒
-承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地。
-停步带着真实惯性，缓缓收住。
-
-1.50－3.20秒
-她以重心脚为轴，自然连贯地完成一个约45度的转身，展示服装的侧面剪裁、领口结构与背面做工。
-转身时肩、腰、腿协同运动，重心转移真实。
-
-3.20－5.00秒
-转身后她稳定站定，展示面料垂感与缝线细节，随后抬眼回看镜头，保持安静从容的对视。`,
-      eye: '转身站定后抬眼回看镜头，眼神安静从容，先有注视，再带一点柔和笑意。',
-      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
-      recap: '她平稳停步、自然转身展示服装侧面与背面细节，随后抬眼与镜头从容对视，整个动作一气呵成。',
-      audio: '安静的影棚房间底噪，鞋底轻轻的转身摩擦声，衣料随转身的细微摆动声。'
-    }
-  },
-  office: {
-    title: '摩天楼职场通勤',
-    lock: '服装与鞋履细节、现代玻璃幕墙大堂背景、晨光、构图、镜头焦段和整体摄影质感',
-    shot: '写字楼大堂内的跟拍',
-    seg1: {
-      beats: `0.00－1.50秒
-模特从首帧的站姿自然起步，在大堂光洁的石面地面上迎面走向镜头。
-起步自然：重心先微微前移，第一步不要突然迈大。
-她保持干练从容的状态，肩背舒展，眼神以三分之二角度与镜头自然交流。
-
-1.50－3.80秒
-她以稳定的节奏继续向前走，每秒约一步，步幅干练利落。
-不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
-双臂在身体两侧自然摆动，与步伐自然交替。
-
-3.80－5.00秒
-她走到离镜头较近的位置，微微放慢脚步，保持从容对视，全身始终完整在画面中。
-接近镜头时动作自然减速，不要突然停住。`,
-      eye: '以三分之二角度与镜头自然对视，眼神从容、自信、有职业感。',
-      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，玻璃幕墙晨光背景保持一致。',
-      recap: '她在晨光大堂中迎面自然走来，步伐真实有惯性，从容自信的眼神与镜头交流，服装与大堂背景与首帧完全一致。',
-      audio: '开阔的大堂空间环境音，轻微的声学混响，石面地面上清晰有节奏的脚步声。'
-    },
-    seg2: {
-      beats: `0.00－1.50秒
-承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地。
-停步带着真实惯性，缓缓收住。
-
-1.50－3.20秒
-她以重心脚为轴，自然连贯地完成一个约45度的转身，展示套装的侧面剪裁、面料垂感与背面做工。
-转身时肩、腰、腿协同运动，重心转移真实。
-
-3.20－5.00秒
-转身后她稳定站定，展示服装细节，随后以三分之二角度回看镜头，保持从容自信的对视。`,
-      eye: '转身站定后以三分之二角度回看镜头，眼神从容自信，先有注视，再带一点柔和暖意。',
-      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出套装面料与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
-      recap: '她平稳停步、自然转身展示套装细节，随后回看镜头从容对视，整个动作干练流畅、真实自然。',
-      audio: '安静通透的大堂氛围音，鞋底轻轻的转身摩擦声，衣物随转身的轻微摆动声。'
-    }
-  },
-  boutique: {
-    title: '高端艺术买手店',
-    lock: '服装与鞋履细节、大理石与黄铜买手店背景、暖色射灯光线、构图、镜头焦段和整体摄影质感',
-    shot: '买手店内的跟拍',
-    seg1: {
-      beats: `0.00－1.50秒
-模特从首帧的站姿自然起步，在大理石地面上迎面走向镜头。
-起步自然：重心先微微前移，第一步不要突然迈大。
-她保持优雅从容的状态，肩背舒展，眼神微微上扬看向镜头。
-
-1.50－3.80秒
-她以稳定的节奏继续向前走，每秒约一步，步幅优雅轻盈。
-不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
-双臂在身体两侧自然摆动，与步伐自然交替。
-
-3.80－5.00秒
-她走到离镜头较近的位置，微微放慢脚步，保持柔和的对视，全身始终完整在画面中。
-接近镜头时动作自然减速，不要突然停住。`,
-      eye: '眼神微微上扬，接住暖色射灯的反光，与镜头保持柔和明亮的对视。',
-      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，射灯暖光在面料上的反光保持一致。',
-      recap: '她在买手店暖光中迎面自然走来，步伐真实有惯性，柔和明亮的眼神与镜头交流，服装与店铺背景与首帧完全一致。',
-      audio: '安静的精品店室内环境音，轻微的声学混响，鞋跟在大理石地面上清晰轻快的节奏声。'
-    },
-    seg2: {
-      beats: `0.00－1.50秒
-承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地。
-停步带着真实惯性，缓缓收住。
-
-1.50－3.20秒
-她以重心脚为轴，自然连贯地完成一个约45度的转身，展示服装的侧面剪裁、面料质感与背面做工。
-转身时肩、腰、腿协同运动，重心转移真实。
-
-3.20－5.00秒
-转身后她稳定站定，展示面料与缝线细节，随后眼神微微上扬回看镜头，保持柔和明亮的对视。`,
-      eye: '转身站定后回看镜头，眼神微微上扬接住射灯反光，柔和明亮，先有注视，再带一点轻盈笑意。',
-      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出面料质感与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
-      recap: '她平稳停步、自然转身展示服装细节，随后上扬眼神与镜头柔和对视，整个动作优雅流畅。',
-      audio: '安静的精品店室内氛围音，鞋跟在大理石上的轻轻转身声，衣料随转身的细微摆动声。'
-    }
-  },
-  outdoor: {
-    title: '自然户外林荫',
-    lock: '服装与鞋履细节、花园石板路背景、树荫光斑、构图、镜头焦段和整体摄影质感',
-    shot: '花园里的跟拍',
-    seg1: {
-      beats: `0.00－1.50秒
-模特从首帧的站姿自然起步，沿着石板小径迎面走向镜头。
-起步自然：重心先微微前移，第一步不要突然迈大。
-她保持松弛自然的状态，肩背舒展，行走中自然回头看镜头。
-
-1.50－3.80秒
-她以放松的节奏继续向前走，每秒约一步，步态轻盈自然。
-不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
-双臂在身体两侧自然摆动，微风吹动发丝和衣摆，动作与环境真实呼应。
-
-3.80－5.00秒
-她走到离镜头较近的位置，微微放慢脚步，保持回眸式的柔和对视，全身始终完整在画面中。
-接近镜头时动作自然减速，不要突然停住。`,
-      eye: '行走中自然回眸看镜头，眼神柔和明亮，像在花园里被熟悉的人轻轻叫住。',
-      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，树荫光斑自然流动但不抢焦点。',
-      recap: '她沿石板小径迎面自然走来，步伐轻盈真实，回眸眼神柔和明亮，服装与花园背景与首帧完全一致。',
-      audio: '户外微风拂过树叶的沙沙声，远处隐约的鸟鸣，石板路上轻快的脚步声，衣物随微风的轻微摆动声。'
-    },
-    seg2: {
-      beats: `0.00－1.50秒
-承接上一镜的行走，模特自然放慢脚步，在盛开花草旁平稳停下，双脚稳稳落地。
-停步带着真实惯性，缓缓收住。
-
-1.50－3.20秒
-她以重心脚为轴，自然连贯地完成一个约45度的转身，展示服装的侧面剪裁、面料垂感与背面做工。
-转身时肩、腰、腿协同运动，重心转移真实。
-
-3.20－5.00秒
-转身后她稳定站定，展示面料与剪裁细节，随后自然回眸看镜头，保持柔和明亮的对视。`,
-      eye: '转身站定后回眸看镜头，眼神柔和明亮，先有注视，再带一点自然笑意。',
-      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
-      recap: '她在花草旁平稳停步、自然转身展示服装细节，随后回眸与镜头柔和对视，整个动作松弛自然。',
-      audio: '连续的花园鸟鸣与风声，石板上的轻轻转身声，衣物随微风与转身的轻微摆动声。'
-    }
-  },
-  cafe: {
-    title: '现代极简咖啡厅',
-    lock: '服装与鞋履细节、咖啡馆木质背景与落地窗、自然暖光、构图、镜头焦段和整体摄影质感',
-    shot: '咖啡馆里的跟拍',
-    seg1: {
-      beats: `0.00－1.50秒
-模特从首帧的站姿自然起步，在木地板上迎面走向镜头。
-起步自然：重心先微微前移，第一步不要突然迈大。
-她保持慵懒放松的状态，肩背舒展，下颌微微抬起、头部四分之三转向镜头。
-
-1.50－3.80秒
-她以放松的节奏继续向前走，每秒约一步，步态松弛自然。
-不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
-双臂在身体两侧自然摆动，与步伐自然交替。
-
-3.80－5.00秒
-她走到离镜头较近的位置，微微放慢脚步，保持温暖亲近的对视，全身始终完整在画面中。
-接近镜头时动作自然减速，不要突然停住。`,
-      eye: '下颌微微抬起，头部四分之三转向镜头，眼神温暖、亲近、有生活感。',
-      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，落地窗暖光保持一致。',
-      recap: '她在咖啡馆暖光中迎面自然走来，步伐松弛真实，温暖的眼神与镜头交流，服装与咖啡馆背景与首帧完全一致。',
-      audio: '咖啡馆远处轻微的人声底噪，隐约的咖啡机蒸汽声，木地板上轻柔的脚步声。'
-    },
-    seg2: {
-      beats: `0.00－1.50秒
-承接上一镜的行走，模特自然放慢脚步，在落地窗边平稳停下，双脚稳稳落地。
-停步带着真实惯性，缓缓收住。
-
-1.50－3.20秒
-她以重心脚为轴，自然连贯地完成一个约45度的转身，展示服装的侧面剪裁、针织面料质感与背面做工。
-转身时肩、腰、腿协同运动，重心转移真实。
-
-3.20－5.00秒
-转身后她稳定站定，展示面料与缝线细节，随后下颌微抬回看镜头，保持温暖亲近的对视。`,
-      eye: '转身站定后回看镜头，下颌微微抬起，眼神温暖亲近，先有注视，再带一点自然笑意。',
-      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出针织面料与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
-      recap: '她在窗边平稳停步、自然转身展示服装细节，随后回看镜头温暖对视，整个动作松弛自然。',
-      audio: '咖啡馆安静的房间氛围音，木地板上的轻轻转身声，衣物随转身的细微摆动声。'
-    }
-  },
-  custom: {
-    title: '自定义专属场景',
-    lock: '服装与鞋履细节、背景环境与光线氛围、构图、镜头焦段和整体摄影质感',
-    shot: '生活场景跟拍',
-    seg1: {
-      beats: `0.00－1.50秒
-模特从首帧的站姿自然起步，在首帧场景中迎面走向镜头。
-起步自然：重心先微微前移，第一步不要突然迈大。
+  pose: {
+    id: 'pose',
+    name: '定点造型展示',
+    description: '原地微动态造型，靠呼吸、重心转移与神态变化突出面料细节',
+    beats: `0.00－1.50秒
+模特保持当前站位，在原地自然呼吸，重心轻轻从一条腿换到另一条腿。
+不要僵硬站立，也不要开始走动。
 她保持放松从容的状态，肩背舒展，眼神柔和地看向镜头。
 
 1.50－3.80秒
-她以稳定的节奏继续向前走，每秒约一步。
-不要匀速机械行走，步伐之间有非常轻微的自然节奏差。
-双臂在身体两侧自然摆动，动作与首帧场景环境真实呼应。
+她保持原地，头部缓慢自然地微微偏向一侧，肩膀随之有细微的松弛变化。
+身体像真实等待拍照间隙的人一样自然松弛，手指有非常轻微的自然屈伸。
+动作幅度很小，全部是微动态，没有大幅度肢体动作。
 
 3.80－5.00秒
-她走到离镜头较近的位置，微微放慢脚步，保持自然柔和的对视，全身始终完整在画面中。
-接近镜头时动作自然减速，不要突然停住。`,
-      eye: '与镜头自然对视，眼神温暖真实、放松而有生气。',
-      camera: '与模特视线等高的稳定后撤跟拍：镜头平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要突然变焦。\n焦点稳定在模特的脸部和服装上，场景光线保持与首帧一致。',
-      recap: '她迎面自然走来，步伐真实有惯性，眼神与镜头自然交流，服装与场景与首帧完全一致。',
-      audio: '与场景匹配的真实环境底噪，有节奏的脚步声，衣物随步伐的轻微摩擦声。'
-    },
-    seg2: {
-      beats: `0.00－1.50秒
-承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地。
-停步带着真实惯性，缓缓收住。
+她把重心稳稳放回双脚，姿态落定，保持与镜头柔和从容的对视。
+不是突然定格，而是像呼吸一样自然收住。`,
+    eye: '与镜头保持自然对视，眼神放松而有生气，允许非常细微的注视角度变化。',
+    camera: '固定机位：机位固定不动，保持全身构图完整，靠模特的微动态让画面有生命感。\n不要推镜，不要拉镜，不要摇镜，不要变焦，不要环绕。\n焦点稳定在模特的脸部和服装上。',
+    recap: '她原地站立，用真实的呼吸、重心转移和细微神态让画面有生命感，服装细节清晰稳定。',
+    sound: '极轻微的衣物面料摩擦声'
+  },
+  turnshow: {
+    id: 'turnshow',
+    name: '原地转身展示',
+    description: '原地缓慢转身，完整展示正、侧、背面服装细节，结尾回眸',
+    beats: `0.00－1.50秒
+模特保持当前站位，开始以重心脚为轴非常缓慢地原地转身，把身体朝向缓缓转向侧面。
+转动速度均匀而缓慢，带着真实的重量转移，不要机械旋转。
 
-1.50－3.20秒
-她以重心脚为轴，自然连贯地完成一个约45度的转身，展示服装的侧面剪裁、面料垂感与背面做工。
-转身时肩、腰、腿协同运动，重心转移真实。
+1.50－3.80秒
+她继续缓慢转身，逐步展示服装的侧面剪裁与背面做工，面料垂感随转身自然流动。
+转身过程中肩膀、腰部、腿部协同运动，头部随转身自然移动。
 
-3.20－5.00秒
-转身后她稳定站定，展示面料与剪裁细节，随后自然回看镜头，保持从容的对视。`,
-      eye: '转身站定后回看镜头，眼神从容真实，先有注视，再带一点自然笑意。',
-      camera: '稳定的慢速横移：平稳慢速横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦。\n焦点始终稳定在模特身上。',
-      recap: '她平稳停步、自然转身展示服装细节，随后回看镜头从容对视，整个动作一气呵成。',
-      audio: '与场景匹配的连续环境音，轻轻的转身脚步声，衣物随转身的轻微摆动声。'
-    }
+3.80－5.00秒
+她稳稳定住，随后自然回头看镜头，与镜头保持从容对视，服装细节全程清晰稳定。`,
+    eye: '转身定住后回头看镜头，眼神自然先有注视，再带出一点柔和的笑意。',
+    camera: '固定机位：机位固定不动，完整记录原地转身过程，保持全身构图完整。\n不要推镜，不要拉镜，不要变焦，不要环绕。\n焦点始终稳定在模特身上。',
+    recap: '她在原地缓慢转身，完整展示服装的正面、侧面与背面细节，最后回头与镜头从容对视。',
+    sound: '鞋底缓慢转动的轻微摩擦声，衣料随转身的自然摆动声'
+  },
+  sidestep: {
+    id: 'sidestep',
+    name: '侧向漫步',
+    description: '侧向轻盈漫步后转身定住，适合展示侧面剪裁与动态面料',
+    beats: `0.00－1.50秒
+模特保持放松状态，开始以缓慢轻盈的横向步伐向画面一侧移动两三步。
+起步自然：第一步小而轻，身体朝向保持侧对镜头。
+她的肩背保持舒展，眼神自然扫向镜头。
+
+1.50－3.80秒
+她以从容的节奏继续横向移动，步幅小而稳，重心平顺过渡。
+不要匀速机械移动，每一步都有真实的落地与惯性。
+双臂在身体两侧自然摆动，摆动幅度比正常行走更小。
+
+3.80－5.00秒
+她停下横向移动，身体自然转向镜头，重心落定，保持柔和从容的对视。
+停顿带着真实惯性，缓缓收住。`,
+    eye: '横向移动中以侧对镜头的视线自然扫向镜头，停步后转为柔和从容的正面注视。',
+    camera: '固定机位或极轻微的稳定横移：完整记录侧向移动，保持全身构图完整。\n不要推镜，不要拉镜，不要突然变焦，不要环绕。\n焦点始终稳定在模特身上。',
+    recap: '她以轻盈的横向步伐从容移动，身体转向镜头定住，像真实抓拍的漫步瞬间。',
+    sound: '轻缓的横向脚步声，衣物随步伐的轻微摆动声'
   }
 };
 
+const H3_ACTION_IDS = Object.keys(H3_ACTIONS);
+// 保留 'random' 原样入库，具体动作在生成时解析
+const normTaskAction = (a, fallback) => (a === 'random' || H3_ACTIONS[a]) ? a : fallback;
+
 // 按【最高优先级】→【5秒核心动作】→【表情与眼神】→【真实人体动态】
 // →【服装与手部】→【镜头】→【画面质感】→【严格去除AI味】→【最终效果】→【音频】
-// 组装场景视频提示词；她/他在此处按性别替换。
-function h3SegPrompt(sceneId, seg, isM, extra = '') {
+// 组装单个分镜提示词；她/他按性别替换；分镜二自动加承接句。
+function h3SegPrompt(sceneId, actionId, seg, isM, extra = '') {
   const cfg = H3_SCENE_CFG[sceneId] || H3_SCENE_CFG.custom;
-  const s = cfg['seg' + seg];
+  const act = H3_ACTIONS[actionId] || H3_ACTIONS.walk;
   const pro = isM ? '他' : '她';
-  const segTitle = seg === 1 ? '分镜一·迎面走姿' : '分镜二·45°转体展示';
-  const body = seg === 1
-    ? '身体重心随步伐自然前移；\n每一步都有真实的落地与惯性；'
-    : '停步时身体带着惯性缓缓收住；\n转身时重心转移自然连贯；';
-  const hand = seg === 1
-    ? '双臂在身体两侧自然摆动，双手放松、手指自然张开，全程可见；'
-    : '双臂自然垂于身体两侧，双手放松、全程可见；';
-  const beats = s.beats.split('她').join(pro);
-  const eye = s.eye.split('她').join(pro);
-  const camera = s.camera.split('她').join(pro);
-  const recap = s.recap.split('她').join(pro);
-  let p = `生成一段5秒、真人写实、自然生活感时尚短视频，适用于 Minimax H3 首帧续写。${cfg.title}·${segTitle}。
+  const segTitle = seg === 1 ? '分镜一' : '分镜二';
+  const opener = seg === 2 ? '承接上一镜的动作与站位，画面保持连续。\n\n' : '';
+  const beats = opener + act.beats.split('她').join(pro);
+  const eye = act.eye.split('她').join(pro);
+  const camera = act.camera.split('她').join(pro);
+  const recap = act.recap.split('她').join(pro);
+  const audio = `${cfg.ambience}，${act.sound}。`;
+  let p = `生成一段5秒、真人写实、自然生活感时尚短视频，适用于 Minimax H3 首帧续写。${cfg.title}·${segTitle}·${act.name}。
 
 【最高优先级】
 严格保持首帧画面中模特的人脸、五官、发型、妆容、肤色、身材比例、${cfg.lock}不变。
@@ -532,7 +454,8 @@ ${eye}
 保留非常轻微的真实人体运动：
 自然呼吸；
 肩颈细微起伏；
-${body}
+身体重心随动作自然转移；
+每个动作都有真实的力度与幅度变化；
 眼睛有真实注视变化；
 允许自然眨眼；
 几缕碎发有极轻微晃动。
@@ -551,7 +474,7 @@ ${body}
 没有粘连，
 没有穿模，
 手腕自然。
-${hand}
+双手放松、全程自然可见，手指自然张开，不插兜、不握拳。
 
 ━━━━━━━━━━━━━━━━━━
 【镜头】
@@ -595,7 +518,7 @@ ${recap}
 
 ━━━━━━━━━━━━━━━━━━
 【音频】
-${s.audio}`;
+${audio}`;
   if (extra) p += `\n\n━━━━━━━━━━━━━━━━━━\n【补充要求】\n${extra}`;
   return p;
 }
@@ -608,15 +531,13 @@ const SCENES = {
     icon: 'buildings',
     description: '阳光洒落的都市街头，自然光影景深，亲密POV眼神交流与潮流编辑感姿势',
     sceneEnvironment: 'on a sunlit city street sidewalk with historic brownstone buildings, natural directional sunlight casting soft ground shadows',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'stylish East Asian editorial model', 'handsome East Asian editorial model', customStylePrompt);
+      const subj = styledSubject(gender, style, 'stylish East Asian female editorial model', 'stylish East Asian male editorial model', customStylePrompt, hairKey, faceKey);
       const pro = isM ? 'he' : 'she';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length on a sunlit city street sidewalk with historic brownstone buildings, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus, with a soft intimate POV feeling. Direct eye contact with the viewer, head in a gentle three-quarter turn, gaze connecting naturally. Relaxed editorial stance, subtle natural weight shift to one hip, shoulders soft and open, waistline and long legs forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial fashion lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the concrete sidewalk with realistic soft ground contact shadows beneath footwear. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Clean directional summer sunlight casting soft realistic ground shadows, neutral-to-warm daylight, ivory and cream clothing staying true to tone, brick and pavement colors remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering on cheeks, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, f/2.8, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: h3SegPrompt('street', 1, isM, custom),
-        seg2_prompt: h3SegPrompt('street', 2, isM, custom)
+        krea_prompt: `a ${subj} standing full-length on a sunlit city street sidewalk with historic brownstone buildings, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus, with a soft intimate POV feeling. Direct eye contact with the viewer, head in a gentle three-quarter turn, gaze connecting naturally. Relaxed editorial stance, subtle natural weight shift to one hip, shoulders soft and open, waistline and long legs forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial fashion lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the concrete sidewalk with realistic soft ground contact shadows beneath footwear. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Clean directional summer sunlight casting soft realistic ground shadows, neutral-to-warm daylight, ivory and cream clothing staying true to tone, brick and pavement colors remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering on cheeks, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, f/2.8, subtle organic film grain, intimate POV with the viewer standing close${extra}`
       };
     }
   },
@@ -627,15 +548,13 @@ const SCENES = {
     icon: 'camera',
     description: '纯色摄影棚无影墙，高端柔光箱打光，突出眼神交流与姿态几何',
     sceneEnvironment: 'in a clean minimalist studio against a neutral grey cyclorama backdrop, diffuse softbox studio lighting',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'professional East Asian editorial model', 'handsome East Asian editorial model', customStylePrompt);
+      const subj = styledSubject(gender, style, 'professional East Asian female model', 'professional East Asian male model', customStylePrompt, hairKey, faceKey);
       const pro = isM ? 'he' : 'she';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in a clean minimalist studio against a neutral grey cyclorama backdrop, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Slightly lowered chin with eyes lifted toward the lens, a quiet intimate gaze. Elegant upright posture, body turned a quarter away from camera, shoulders soft and open, waistline forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial catalogue lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the matte studio floor with realistic soft ground contact shadows beneath footwear. Serene composed editorial expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Diffuse softbox studio lighting with soft shadow falloff, clean neutral-to-warm color balance, ivory and cream clothing staying true to tone, grey backdrop remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering on cheeks, natural catchlights in the eyes, tactile cloth texture and seam details. Props stay small and secondary if present. Shot on 50mm lens, subtle organic film grain, soft contact shadows, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: h3SegPrompt('studio', 1, isM, custom),
-        seg2_prompt: h3SegPrompt('studio', 2, isM, custom)
+        krea_prompt: `a ${subj} standing full-length in a clean minimalist studio against a neutral grey cyclorama backdrop, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Slightly lowered chin with eyes lifted toward the lens, a quiet intimate gaze. Elegant upright posture, body turned a quarter away from camera, shoulders soft and open, waistline forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial catalogue lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the matte studio floor with realistic soft ground contact shadows beneath footwear. Serene composed editorial expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Diffuse softbox studio lighting with soft shadow falloff, clean neutral-to-warm color balance, ivory and cream clothing staying true to tone, grey backdrop remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering on cheeks, natural catchlights in the eyes, tactile cloth texture and seam details. Props stay small and secondary if present. Shot on 50mm lens, subtle organic film grain, soft contact shadows, intimate POV with the viewer standing close${extra}`
       };
     }
   },
@@ -645,16 +564,14 @@ const SCENES = {
     enName: 'Executive Urban Commuter',
     icon: 'building',
     description: '现代玻璃幕墙大厦大堂，晨光透射，干练优雅的商务编辑感',
-    sceneEnvironment: 'in the grand entrance lobby of a modern glass corporate skyscraper, polished granite floors, morning architectural sunlight filtering through high glass curtain walls',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
+    sceneEnvironment: 'in the quiet morning lobby of a modern glass corporate skyscraper with a low reception counter and a few potted plants, polished granite floors with subtle realistic reflections, soft daylight through the tall glass curtain wall',
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'chic East Asian business woman', 'refined East Asian businessman', customStylePrompt);
+      const subj = styledSubject(gender, style, 'chic East Asian businesswoman', 'chic East Asian businessman', customStylePrompt, hairKey, faceKey);
       const pro = isM ? 'he' : 'she';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in the grand entrance lobby of a modern glass corporate skyscraper with polished granite floors, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Calm three-quarter eye contact with confident professional warmth, head turned just enough to show the jawline. Composed executive stance, posture relaxed but intentional, shoulders soft and open, waistline visible beneath tailored garments, long legs forming clean lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body executive lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the polished granite floor with realistic soft ground contact shadows beneath footwear and subtle diffuse ambient floor sheen. Naturally closed lips without tension, relaxed natural jawline, soft natural hair. Morning architectural sunlight filtering diagonally through high glass curtain walls, clean neutral-to-warm light, granite and glass tones staying faithful, clothing colors remaining true to tone, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile leather grain and fabric drape. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: h3SegPrompt('office', 1, isM, custom),
-        seg2_prompt: h3SegPrompt('office', 2, isM, custom)
+        krea_prompt: `a ${subj} standing full-length in the quiet morning lobby of a modern glass corporate skyscraper with a low reception counter nearby and polished granite floors, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Calm three-quarter eye contact with confident professional warmth, head turned just enough to show the jawline. Composed executive stance, posture relaxed but intentional, shoulders soft and open, waistline visible beneath tailored garments, long legs forming clean lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body executive lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the polished granite floor with realistic soft ground contact shadows beneath footwear and subtle diffuse ambient floor sheen. Naturally closed lips without tension, relaxed natural jawline, soft natural hair. Soft diffuse morning daylight through the tall glass curtain wall, clean neutral-to-warm light, granite and glass tones staying faithful, clothing colors remaining true to tone, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile leather grain and fabric drape. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`
       };
     }
   },
@@ -665,15 +582,13 @@ const SCENES = {
     icon: 'storefront',
     description: '奢华大理石与柔光射灯的高端专柜，突出女性气质与眼神光',
     sceneEnvironment: 'in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, warm 3200K architectural recessed spotlights',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'elegant East Asian fashion model', 'confident refined East Asian male model', customStylePrompt);
+      const subj = styledSubject(gender, style, 'graceful East Asian female fashion model', 'graceful East Asian male fashion model', customStylePrompt, hairKey, faceKey);
       const pro = isM ? 'he' : 'she';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Soft upward gaze catching warm spotlight reflections, composed direct eye contact with the viewer. Graceful weight on one leg, torso softly angled, shoulders and waistline forming refined elegant lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body luxury retail lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the polished marble floor with realistic soft ground contact shadows beneath footwear and subtle diffuse floor sheen. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Warm 3200K architectural recessed spotlights with soft falloff, clean neutral-to-warm color balance, marble and brass tones staying faithful, clothing colors remaining true to tone, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and leather grain. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: h3SegPrompt('boutique', 1, isM, custom),
-        seg2_prompt: h3SegPrompt('boutique', 2, isM, custom)
+        krea_prompt: `a ${subj} standing full-length in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Soft upward gaze catching warm spotlight reflections, composed direct eye contact with the viewer. Graceful weight on one leg, torso softly angled, shoulders and waistline forming refined elegant lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body luxury retail lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the polished marble floor with realistic soft ground contact shadows beneath footwear and subtle diffuse floor sheen. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Warm 3200K architectural recessed spotlights with soft falloff, clean neutral-to-warm color balance, marble and brass tones staying faithful, clothing colors remaining true to tone, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and leather grain. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`
       };
     }
   },
@@ -683,16 +598,14 @@ const SCENES = {
     enName: 'Nature Sunlight & Garden',
     icon: 'leaf',
     description: '绿意盎然的公园石板路与林荫微风，柔和眼神回眸与浪漫编辑感',
-    sceneEnvironment: 'in a lush sun-dappled botanical garden along a smooth stone paver pathway, blooming foliage, natural outdoor daylight, dappled sunbeam highlights',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
+    sceneEnvironment: 'on a quiet tree-lined park path with uneven weathered stone pavers, mature green trees and low hedges, scattered fallen leaves, soft diffused daylight through the leaves with gentle natural shadow patches',
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'natural East Asian fashion model', 'relaxed East Asian male model', customStylePrompt);
+      const subj = styledSubject(gender, style, 'natural East Asian female model', 'natural East Asian male model', customStylePrompt, hairKey, faceKey);
       const pro = isM ? 'he' : 'she';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in a lush sun-dappled botanical garden along a smooth stone paver pathway with blooming foliage, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. A side glance over the shoulder with maintained eye contact, face angle varied and alive. Peaceful relaxed stance beside garden greenery, posture fluid and natural, shoulders soft and open, waistline visible, long legs forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body lifestyle lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the stone pavers with realistic soft ground contact shadows beneath footwear. Serene gentle expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Natural outdoor daylight, soft dappled sunbeam highlights through tree canopies, clean neutral-to-warm color balance, green foliage staying true to tone, stone colors remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile cloth folds and texture. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: h3SegPrompt('outdoor', 1, isM, custom),
-        seg2_prompt: h3SegPrompt('outdoor', 2, isM, custom)
+        krea_prompt: `a ${subj} standing full-length on a quiet tree-lined park path with uneven weathered stone pavers, mature green foliage and low hedges, a few scattered fallen leaves on the ground, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. A side glance over the shoulder with maintained eye contact, face angle varied and alive. Peaceful relaxed stance beside natural park greenery, posture fluid and natural, shoulders soft and open, waistline visible, long legs forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body lifestyle lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the stone pavers with realistic soft ground contact shadows beneath footwear. Serene gentle expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Soft diffused outdoor daylight filtering through the tree canopy, gentle organic shadow patches on the path, clean neutral-to-warm color balance, green foliage staying true to tone without oversaturation, worn stone colors remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile cloth folds and texture. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`
       };
     }
   },
@@ -702,16 +615,14 @@ const SCENES = {
     enName: 'Lifestyle Nordic Cafe',
     icon: 'coffee',
     description: '落地窗暖调咖啡馆，慵懒而亲密的生活编辑感',
-    sceneEnvironment: 'in a cozy Nordic-aesthetic cafe with warm timber oak interiors and large floor-to-ceiling sunlit windows, warm natural daylight and soft interior fill',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '') => {
+    sceneEnvironment: 'in a cozy modern cafe with warm timber oak interiors, a few simple wooden tables and chairs, and large floor-to-ceiling windows, soft natural daylight through the windows',
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'stylish East Asian young woman', 'stylish East Asian young man', customStylePrompt);
+      const subj = styledSubject(gender, style, 'stylish East Asian young woman', 'stylish East Asian young man', customStylePrompt, hairKey, faceKey);
       const pro = isM ? 'he' : 'she';
       const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in a cozy Nordic-aesthetic cafe with warm timber oak interiors and large floor-to-ceiling sunlit windows, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Chin softly lifted, head turned three-quarters toward the lens, warm approachable eye contact. Casual editorial stance near the sunlit window, body language relaxed but intentional, shoulders soft and open, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body cozy editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the hardwood floor with realistic soft ground contact shadows beneath footwear. Relaxed serene expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Warm natural window light with soft interior fill, clean neutral-to-warm color balance, warm oak and cream tones staying faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile knit and fabric weave. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: h3SegPrompt('cafe', 1, isM, custom),
-        seg2_prompt: h3SegPrompt('cafe', 2, isM, custom)
+        krea_prompt: `a ${subj} standing full-length in a cozy modern cafe with warm timber oak interiors, a few simple wooden tables and chairs, and large floor-to-ceiling windows, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Chin softly lifted, head turned three-quarters toward the lens, warm approachable eye contact. Casual editorial stance near the window, body language relaxed but intentional, shoulders soft and open, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body cozy editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the hardwood floor with realistic soft ground contact shadows beneath footwear. Relaxed serene expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Warm natural window light with soft interior fill, clean neutral-to-warm color balance, warm oak and cream tones staying faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile knit and fabric weave. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`
       };
     }
   },
@@ -722,9 +633,9 @@ const SCENES = {
     icon: 'palette',
     description: '自由描述任意个性化展示背景（海滩落日、雪山木屋、赛博霓虹、古风江南等），保持眼神交流与真实皮肤质感',
     sceneEnvironment: 'in an aesthetic commercial fashion lookbook background, natural commercial lighting',
-    buildPrompts: (gender = 'female', customPrompt = '', customScene = '', style = 'classic', customStylePrompt = '') => {
+    buildPrompts: (gender = 'female', customPrompt = '', customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval') => {
       const isM = gender === 'male';
-      const subj = styledSubject(gender, style, 'stylish East Asian editorial model', 'handsome East Asian editorial model', customStylePrompt);
+      const subj = styledSubject(gender, style, 'stylish East Asian female editorial model', 'stylish East Asian male editorial model', customStylePrompt, hairKey, faceKey);
       const pro = isM ? 'he' : 'she';
       const rawScene = (customScene && customScene.trim()) ? customScene.trim() : 'an aesthetic commercial fashion lookbook background';
       const sceneDesc = /^(in|on|at|against|under|near|along)\s+/i.test(rawScene)
@@ -732,9 +643,7 @@ const SCENES = {
         : `in ${rawScene}`;
       const extra = customPrompt ? `, ${customPrompt}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length ${sceneDesc}, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Soft direct eye contact with a warm genuine presence, face angle natural and alive. Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic natural lighting consistent with the environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`,
-        seg1_prompt: h3SegPrompt('custom', 1, isM, customPrompt),
-        seg2_prompt: h3SegPrompt('custom', 2, isM, customPrompt)
+        krea_prompt: `a ${subj} standing full-length ${sceneDesc}, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${pro} is the clear visual focus with a soft intimate POV feeling. Soft direct eye contact with a warm genuine presence, face angle natural and alive. Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic natural lighting consistent with the environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain, intimate POV with the viewer standing close${extra}`
       };
     }
   }
@@ -763,7 +672,11 @@ function computeTaskPrompts({
   custom_scene = '',
   custom_prompt = '',
   model_image = null,
-  scene_image = null
+  scene_image = null,
+  action1 = 'random',
+  action2 = 'random',
+  hair_style = 'natural',
+  face_shape = 'oval'
 } = {}) {
   const modelStyleKey = MODEL_STYLES[model_style] ? model_style : 'classic';
   const sceneConfig = SCENES[scene] || SCENES.street;
@@ -778,7 +691,9 @@ function computeTaskPrompts({
     cleanCustom,
     cleanCustomScene,
     modelStyleKey,
-    cleanCustomModelStyle
+    cleanCustomModelStyle,
+    hair_style,
+    face_shape
   );
 
   let kreaPrompt = prompts.krea_prompt;
@@ -791,14 +706,26 @@ function computeTaskPrompts({
     const modelGenderLabel = isM ? 'male model' : 'female model';
     kreaPrompt = `Create an editorial lookbook portrait. Transfer the clothing and outfit from the first reference image onto the ${modelGenderLabel} in the second reference image, strictly preserving their exact facial features, facial identity, eye shape, nose shape, and hairstyle, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${isM ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling, standing ${sceneEnv}. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Soft direct eye contact with warm genuine presence, serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic lighting consistent with the environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
   } else if (scene_image) {
-    const subj = styledSubject(gender, modelStyleKey, 'stylish female model', 'handsome male model', cleanCustomModelStyle);
+    const subj = styledSubject(gender, modelStyleKey, 'stylish female model', 'stylish male model', cleanCustomModelStyle, hair_style, face_shape);
     kreaPrompt = `Create an editorial lookbook portrait of a ${subj} standing full-length in the background environment from the first reference image, wearing the exact clothing and outfit from the second reference image, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, naturally complementing separated tops with clean tailored bottoms. ${isM ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling. Soft direct eye contact with warm genuine presence, face angle natural and alive. Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Serene composed expression, naturally closed lips without tension, relaxed natural jawline, soft natural hair. Realistic illumination matched to the background environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
+  }
+
+  let a1 = normTaskAction(action1, 'random');
+  let a2 = normTaskAction(action2, 'random');
+  // 随机抽动作：双随机时避免两分镜抽到同一条，最大化组合多样性
+  if (a1 === 'random') a1 = H3_ACTION_IDS[Math.floor(Math.random() * H3_ACTION_IDS.length)];
+  if (a2 === 'random') {
+    a2 = H3_ACTION_IDS[Math.floor(Math.random() * H3_ACTION_IDS.length)];
+    if (a1 === a2 && H3_ACTION_IDS.length > 1) {
+      a2 = H3_ACTION_IDS[(H3_ACTION_IDS.indexOf(a1) + 1) % H3_ACTION_IDS.length];
+    }
   }
 
   return {
     krea_prompt: kreaPrompt,
-    seg1_prompt: prompts.seg1_prompt,
-    seg2_prompt: prompts.seg2_prompt
+    seg1_prompt: h3SegPrompt(sceneConfig.id, a1, 1, isM, cleanCustom),
+    seg2_prompt: h3SegPrompt(sceneConfig.id, a2, 2, isM, cleanCustom),
+    actions: { seg1: a1, seg2: a2 }
   };
 }
 
@@ -991,6 +918,10 @@ app.get('/api/system', async (req, res) => {
   }
 });
 
+app.get('/api/actions', (_req, res) => {
+  res.json(Object.values(H3_ACTIONS).map(a => ({ id: a.id, name: a.name, description: a.description })));
+});
+
 app.get('/api/scenes', (req, res) => {
   const list = Object.values(SCENES).map(s => ({
     id: s.id,
@@ -1006,6 +937,34 @@ app.get('/api/model-styles', (req, res) => {
   res.json(MODEL_STYLES);
 });
 
+// Configuration Endpoints for Engines (OpenAI, Krea, etc.)
+app.get('/api/config', (req, res) => {
+  try {
+    res.json(getSafeConfig());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/config', (req, res) => {
+  try {
+    const updated = saveConfig(req.body || {});
+    res.json({ success: true, config: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/config/test', async (req, res) => {
+  try {
+    const { apiKey, baseUrl } = req.body || {};
+    const result = await testOpenAiConnection(apiKey, baseUrl);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
 // Endpoint for frontend to preview authoritative underlying prompts for inspection and fine-tuning
 app.post('/api/preview-prompts', (req, res) => {
   try {
@@ -1017,7 +976,11 @@ app.post('/api/preview-prompts', (req, res) => {
       custom_scene = '',
       custom_prompt = '',
       model_image = null,
-      scene_image = null
+      scene_image = null,
+      action1 = 'random',
+      action2 = 'random',
+      hair_style = 'natural',
+      face_shape = 'oval'
     } = req.body || {};
 
     const prompts = computeTaskPrompts({
@@ -1028,7 +991,11 @@ app.post('/api/preview-prompts', (req, res) => {
       custom_scene,
       custom_prompt,
       model_image,
-      scene_image
+      scene_image,
+      action1,
+      action2,
+      hair_style,
+      face_shape
     });
 
     res.json(prompts);
@@ -1068,9 +1035,14 @@ app.post('/api/generate', async (req, res) => {
     custom_prompt = '',
     aspect_ratio = '3:4',
     mode = 'video',
+    still_engine = 'krea2',
     krea_prompt = null,
     seg1_prompt = null,
-    seg2_prompt = null
+    seg2_prompt = null,
+    action1 = 'random',
+    action2 = 'random',
+    hair_style = 'natural',
+    face_shape = 'oval'
   } = req.body;
 
   if (!image) {
@@ -1106,6 +1078,7 @@ app.post('/api/generate', async (req, res) => {
     model_style_prompt: typeof model_style_prompt === 'string' ? model_style_prompt.trim() : '',
     custom_scene: isCustomScene ? custom_scene : '',
     custom_prompt,
+    still_engine: (still_engine === 'gpt_image_2' ? 'gpt_image_2' : 'krea2'),
     custom_krea_prompt: typeof krea_prompt === 'string' && krea_prompt.trim() ? krea_prompt.trim() : null,
     custom_seg1_prompt: typeof seg1_prompt === 'string' && seg1_prompt.trim() ? seg1_prompt.trim() : null,
     custom_seg2_prompt: typeof seg2_prompt === 'string' && seg2_prompt.trim() ? seg2_prompt.trim() : null,
@@ -1113,6 +1086,10 @@ app.post('/api/generate', async (req, res) => {
     image: sanitizedImage,
     model_image: sanitizedModelImage,
     scene_image: isCustomScene ? sanitizedSceneImage : null,
+    action1: normTaskAction(action1, 'random'),
+    action2: normTaskAction(action2, 'random'),
+    hair_style: HAIRSTYLES[hair_style] ? hair_style : 'natural',
+    face_shape: FACE_SHAPES[face_shape] ? face_shape : 'oval',
     mode,
     stillImage: null,
     videoUrl: null,
@@ -1172,9 +1149,14 @@ app.post('/api/generate-batch', async (req, res) => {
     custom_scene = '',
     aspect_ratio = '3:4',
     mode = 'video',
+    still_engine = 'krea2',
     krea_prompt = null,
     seg1_prompt = null,
-    seg2_prompt = null
+    seg2_prompt = null,
+    action1 = 'random',
+    action2 = 'random',
+    hair_style = 'natural',
+    face_shape = 'oval'
   } = req.body;
 
   if (!image) {
@@ -1210,6 +1192,7 @@ app.post('/api/generate-batch', async (req, res) => {
       model_style_prompt: typeof model_style_prompt === 'string' ? model_style_prompt.trim() : '',
       custom_scene: scKey === 'custom' ? custom_scene : '',
       custom_prompt,
+      still_engine: (still_engine === 'gpt_image_2' ? 'gpt_image_2' : 'krea2'),
       custom_krea_prompt: isTargetScene && typeof krea_prompt === 'string' && krea_prompt.trim() ? krea_prompt.trim() : null,
       custom_seg1_prompt: isTargetScene && typeof seg1_prompt === 'string' && seg1_prompt.trim() ? seg1_prompt.trim() : null,
       custom_seg2_prompt: isTargetScene && typeof seg2_prompt === 'string' && seg2_prompt.trim() ? seg2_prompt.trim() : null,
@@ -1217,6 +1200,10 @@ app.post('/api/generate-batch', async (req, res) => {
       image: sanitizedImage,
       model_image: sanitizedModelImage,
       scene_image: scKey === 'custom' ? sanitizedSceneImage : null,
+      action1: normTaskAction(action1, 'random'),
+      action2: normTaskAction(action2, 'random'),
+      hair_style: HAIRSTYLES[hair_style] ? hair_style : 'natural',
+      face_shape: FACE_SHAPES[face_shape] ? face_shape : 'oval',
       mode,
       stillImage: null,
       videoUrl: null,
@@ -1376,8 +1363,11 @@ async function runGenerationJob(taskId) {
   const kreaWfPath = path.join(WORKFLOWS_DIR, 'krea2_outfit_transfer.json');
   const h3WfPath = path.join(WORKFLOWS_DIR, 'fashion_streetwear_10s_extend.json');
 
-  if (!fs.existsSync(kreaWfPath) || !fs.existsSync(h3WfPath)) {
-    throw new Error('Required workflow JSON templates not found on server.');
+  if (task.still_engine !== 'gpt_image_2' && !fs.existsSync(kreaWfPath)) {
+    throw new Error('Required Krea-2 workflow JSON template not found on server.');
+  }
+  if (task.mode !== 'still_only' && !fs.existsSync(h3WfPath)) {
+    throw new Error('Required MiniMax H3 workflow JSON template not found on server.');
   }
 
   const cleanCustomScene = stripTextboxNoise(task.custom_scene);
@@ -1389,7 +1379,11 @@ async function runGenerationJob(taskId) {
     custom_scene: task.custom_scene,
     custom_prompt: task.custom_prompt,
     model_image: task.model_image,
-    scene_image: task.scene_image
+    scene_image: task.scene_image,
+    action1: task.action1,
+    action2: task.action2,
+    hair_style: task.hair_style,
+    face_shape: task.face_shape
   });
 
   const finalKreaPrompt = (task.custom_krea_prompt && task.custom_krea_prompt.trim()) || autoPrompts.krea_prompt;
@@ -1401,200 +1395,44 @@ async function runGenerationJob(taskId) {
     : task.scene.name;
 
   // File paths to track for reliable cleanup
-  const tempInputFile = `temp_in_${taskId}_${path.basename(task.image)}`;
-  const srcInputPath = path.join(PROJECT_INPUT_DIR, task.image);
-  const dstTempInputPath = path.join(COMFY_TEMP_INPUT_DIR, tempInputFile);
   const stagedH3Name = `staged_${taskId}.png`;
   const dstStagedH3Path = path.join(COMFY_TEMP_INPUT_DIR, stagedH3Name);
 
-  let dstTempModelPath = null;
-  let dstTempScenePath = null;
-  const tempModelFile = task.model_image ? `temp_model_${taskId}_${path.basename(task.model_image)}` : null;
-  const tempSceneFile = task.scene_image ? `temp_scene_${taskId}_${path.basename(task.scene_image)}` : null;
-
   try {
     // -------------------------------------------------------------
-    // STAGE 1: Krea-2 Outfit Transfer (~20s)
+    // STAGE 1: Reference Still Image Generation (~20s)
+    // Supports Krea-2 (ComfyUI) or GPT Image 2 (OpenAI)
     // -------------------------------------------------------------
     task.status = 'running';
     task.progress = 10;
+    const engineLabel = task.still_engine === 'gpt_image_2' ? 'GPT Image 2' : 'Krea-2';
     const modelTag = task.model_image ? ' · 指定模特主角' : ` · ${MODEL_STYLES[task.model_style].name}`;
-    task.message = `[阶段一] 正在生成模特试衣定妆照 (${sceneDisplayName}${modelTag})...`;
+    task.message = `[阶段一] 正在生成模特试衣定妆照 (${sceneDisplayName}${modelTag} · ${engineLabel})...`;
 
-    if (!fs.existsSync(srcInputPath)) {
-      throw new Error(`找不到上传的原始服装图片: ${task.image}`);
-    }
-    fs.copyFileSync(srcInputPath, dstTempInputPath);
-
-    // Detect if the uploaded garment image is a white-background flat-lay/mannequin.
-    // High-score inputs push plastic studio look onto the model, so we loosen ref_boost.
-    const garmentAnalysis = detectFlatlayScoreSync(srcInputPath);
-    const isFlatlay = garmentAnalysis.flatlay_score >= 0.65;
-    const garmentRefBoost = isFlatlay ? 0.94 : 0.96;
-    if (garmentAnalysis.flatlay_score > 0) {
-      console.log(`[krea2] garment flat-lay score ${garmentAnalysis.flatlay_score}, ref_boost=${garmentRefBoost}`);
-    }
-
-    const kreaWf = JSON.parse(fs.readFileSync(kreaWfPath, 'utf-8'));
-    requireNodes(kreaWf, 'Krea-2', ['5', '7', '9', '11', '13']);
-    kreaWf['5']['inputs']['image'] = `online_temp/${tempInputFile}`;
-    kreaWf['9']['inputs']['prompt'] = finalKreaPrompt;
-    // Steer the vision encoder toward identity/garment detail instead of the
-    // training default's generic background caption. Path-aware: in the dual-ref
-    // paths the first vision block is the scene/garment slot, the second is the subject slot.
-    if (kreaWf['9']) {
-      kreaWf['9']['inputs']['system_prompt'] = task.model_image
-        ? 'Describe the first reference image focusing on garment silhouette, fabric weave, and seam construction; describe the second reference image focusing on exact facial identity, hairstyle, and natural skin texture with visible pores and fine lines.'
-        : task.scene_image
-          ? 'Describe the first reference image focusing on the environmental setting, realistic lighting, and spatial relationships; describe the second reference image focusing on garment silhouette, fabric weave, and seam construction.'
-          : 'Describe the reference image focusing on garment silhouette, fabric weave, seam construction, garment boundaries, and realistic fabric texture.';
-    }
-    if (kreaWf['4']) {
-      kreaWf['4']['inputs']['strength_model'] = 0.92;
-    }
-    if (kreaWf['8']) {
-      kreaWf['8']['inputs']['ref_boost'] = garmentRefBoost;
-    }
-    // 640-768px is the LoRA's in-distribution band (trained with 384-768 jitter)
-    if (kreaWf['9']) {
-      kreaWf['9']['inputs']['grounding_px'] = 768;
-    }
-    // Training-matched unconditional for the grounded negative: empty prompt +
-    // same image (krea2edit author's recipe). At cfg=1.0 the sampler drops the
-    // negative entirely (comfy cfg1 optimization), so a token list was dead weight.
-    if (kreaWf['10']) {
-      kreaWf['10']['inputs']['prompt'] = '';
-      kreaWf['10']['inputs']['grounding_px'] = 768;
-    }
-    // Slightly raise step count for dpmpp_2m to get gentler gradients on skin/fabrics.
-    if (kreaWf['11']) {
-      kreaWf['11']['inputs']['steps'] = 10;
-      kreaWf['11']['inputs']['sampler_name'] = 'dpmpp_2m';
-      kreaWf['11']['inputs']['scheduler'] = 'sgm_uniform';
-    }
-    // Film grain: subtle 2% strength noise breaks AI pixel-perfect smoothness.
-    // Insert the node dynamically if the workflow template does not yet contain it.
-    function nextNodeId(wf) {
-      const ids = Object.keys(wf).map(Number).filter(n => !isNaN(n) && n > 0);
-      return String(Math.max(0, ...ids) + 1);
-    }
-    const grainCandidate = Object.entries(kreaWf).find(([, n]) => n && n.class_type === 'ImageAddNoise');
-    let grainId = grainCandidate ? grainCandidate[0] : null;
-    if (!grainId) {
-      const decodeId = Object.entries(kreaWf).find(([, n]) => n && n.class_type === 'VAEDecode')?.[0];
-      const saveEntry = Object.entries(kreaWf).find(([, n]) => n && n.class_type === 'SaveImage');
-      if (decodeId && saveEntry) {
-        grainId = nextNodeId(kreaWf);
-        kreaWf[grainId] = {
-          class_type: 'ImageAddNoise',
-          inputs: { image: [decodeId, 0], seed: randomSeed(), strength: 0.02 }
-        };
-        saveEntry[1].inputs.images = [grainId, 0];
-      }
-    }
-    if (grainId && kreaWf[grainId]) {
-      kreaWf[grainId].inputs.seed = randomSeed();
-      kreaWf[grainId].inputs.strength = 0.02;
-    }
-
-    // -------------------------------------------------------------
-    // Dynamic Model Identity Injection (Dual Reference)
-    // -------------------------------------------------------------
-    if (task.model_image) {
-      const srcModelPath = path.join(PROJECT_INPUT_DIR, task.model_image);
-      if (fs.existsSync(srcModelPath)) {
-        dstTempModelPath = path.join(COMFY_TEMP_INPUT_DIR, tempModelFile);
-        fs.copyFileSync(srcModelPath, dstTempModelPath);
-
-        kreaWf['20'] = {
-          class_type: 'LoadImage',
-          inputs: { image: `online_temp/${tempModelFile}` }
-        };
-        kreaWf['21'] = {
-          class_type: 'VAEEncode',
-          inputs: { pixels: ['20', 0], vae: ['3', 0] }
-        };
-
-        kreaWf['8']['inputs']['source_latent_b'] = ['21', 0];
-        kreaWf['8']['inputs']['source_image_b'] = ['20', 0];
-        kreaWf['8']['inputs']['ref_boost'] = 1.0; // second ref = model identity (face must stay locked)
-        kreaWf['8']['inputs']['ref_boost_a'] = garmentRefBoost; // first ref = clothing outfit
-
-        kreaWf['9']['inputs']['image_b'] = ['20', 0];
-        if (kreaWf['10']) {
-          kreaWf['10']['inputs']['image_b'] = ['20', 0];
-        }
-
-        kreaWf['9']['inputs']['prompt'] = finalKreaPrompt;
-      }
-    } else if (task.scene_image) {
-      const srcScenePath = path.join(PROJECT_INPUT_DIR, task.scene_image);
-      if (fs.existsSync(srcScenePath)) {
-        dstTempScenePath = path.join(COMFY_TEMP_INPUT_DIR, tempSceneFile);
-        fs.copyFileSync(srcScenePath, dstTempScenePath);
-
-        // Reference 1: Scene image (Node 5)
-        // Reference 2: Garment image (Node 20)
-        kreaWf['5']['inputs']['image'] = `online_temp/${tempSceneFile}`;
-        kreaWf['20'] = {
-          class_type: 'LoadImage',
-          inputs: { image: `online_temp/${tempInputFile}` }
-        };
-        kreaWf['21'] = {
-          class_type: 'VAEEncode',
-          inputs: { pixels: ['20', 0], vae: ['3', 0] }
-        };
-        kreaWf['8']['inputs']['source_latent_b'] = ['21', 0];
-        kreaWf['8']['inputs']['source_image_b'] = ['20', 0];
-        kreaWf['8']['inputs']['ref_boost'] = garmentRefBoost; // second ref = garment (loosen for flat-lay)
-        kreaWf['8']['inputs']['ref_boost_a'] = 1.0; // first ref = scene
-
-        kreaWf['9']['inputs']['image_b'] = ['20', 0];
-        if (kreaWf['10']) {
-          kreaWf['10']['inputs']['image_b'] = ['20', 0];
-        }
-
-        kreaWf['9']['inputs']['prompt'] = finalKreaPrompt;
-      }
-    }
-    kreaWf['11']['inputs']['seed'] = randomSeed();
-
-    // Synchronize Stage 1 latent with the canvas shared across both stages
-    // (must equal the Stage 2 latent size, or the first frame gets stretched)
-    const canvas = ASPECT_CANVAS[task.aspect_ratio] || ASPECT_CANVAS['3:4'];
-    kreaWf['7']['inputs']['width'] = canvas.width;
-    kreaWf['7']['inputs']['height'] = canvas.height;
-
-    const kreaPrefix = `online_temp/krea_${task.scene.id}_${taskId}`;
-    kreaWf['13']['inputs']['filename_prefix'] = kreaPrefix;
-
-    const kreaRes = await submitComfyWorkflowWithProgress(kreaWf, (ev) => {
-      if (ev.type === 'sampling') {
-        task.progress = Math.min(38, Math.round(10 + (ev.value / ev.max) * 28));
-        task.message = `[阶段一] 试衣照渲染中 (${ev.value}/${ev.max} 步)...`;
+    const stillResult = await generateReferenceImage({
+      engine: task.still_engine || 'krea2',
+      task,
+      taskId,
+      prompt: finalKreaPrompt,
+      onProgress: (progress, message) => {
+        task.progress = progress;
+        task.message = message;
+      },
+      context: {
+        projectInputDir: PROJECT_INPUT_DIR,
+        projectImageDir: PROJECT_IMAGE_DIR,
+        comfyTempInputDir: COMFY_TEMP_INPUT_DIR,
+        comfyOutputDir: COMFY_OUTPUT_DIR,
+        workflowsDir: WORKFLOWS_DIR,
+        aspectCanvas: ASPECT_CANVAS,
+        randomSeed,
+        detectFlatlayScoreSync,
+        requireNodes,
+        submitComfyWorkflow: submitComfyWorkflowWithProgress
       }
     });
 
-    const kreaOutImgs = kreaRes.outputs && kreaRes.outputs['13'] && kreaRes.outputs['13'].images;
-    if (!kreaOutImgs || kreaOutImgs.length === 0) {
-      throw new Error('Krea-2 试衣生成失败，未产生有效图片输出。');
-    }
-
-    // Copy Stage 1 result into Project storage/outputs/images/
-    // (trust the subfolder ComfyUI reports instead of hardcoding online_temp)
-    const stillRawFilename = kreaOutImgs[0].filename;
-    const stillSubfolder = kreaOutImgs[0].subfolder || '';
-    const srcStillPath = path.join(COMFY_OUTPUT_DIR, stillSubfolder, stillRawFilename);
-    const savedStillName = `krea_${task.scene.id}_${taskId}.png`;
-    const destStillPath = path.join(PROJECT_IMAGE_DIR, savedStillName);
-    fs.copyFileSync(srcStillPath, destStillPath);
-
-    // Clean up Stage 1 image from ComfyUI output directory immediately
-    try {
-      if (fs.existsSync(srcStillPath)) fs.unlinkSync(srcStillPath);
-    } catch(e) {}
-
-    task.stillImage = `/outputs/images/${savedStillName}`;
+    task.stillImage = stillResult.webUrl;
     task.progress = 40;
     task.message = '阶段一完成，定妆照已生成。';
 
@@ -1610,10 +1448,11 @@ async function runGenerationJob(taskId) {
     // STAGE 2: MiniMax H3 10-Second Extension (~180s)
     // -------------------------------------------------------------
     task.progress = 45;
-    task.message = '[阶段二] 正在加载视频生成模型...';
+    const segActionNames = `${H3_ACTIONS[autoPrompts.actions.seg1].name} → ${H3_ACTIONS[autoPrompts.actions.seg2].name}`;
+    task.message = `[阶段二] 正在加载视频生成模型（${segActionNames}）...`;
 
     // Stage still image into ComfyUI temp input for MiniMax H3
-    fs.copyFileSync(destStillPath, dstStagedH3Path);
+    fs.copyFileSync(stillResult.destPath, dstStagedH3Path);
 
     const h3Wf = JSON.parse(fs.readFileSync(h3WfPath, 'utf-8'));
     requireNodes(h3Wf, 'MiniMax H3', ['1', '40', '41', '80', '81', '84']);

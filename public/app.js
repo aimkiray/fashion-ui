@@ -103,7 +103,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const lightboxImg = document.getElementById('lightboxImg');
   const btnCloseLightbox = document.getElementById('btnCloseLightbox');
 
+  // API Config Modal Elements
+  const btnOpenApiConfig = document.getElementById('btnOpenApiConfig');
+  const btnCloseApiConfig = document.getElementById('btnCloseApiConfig');
+  const apiConfigModal = document.getElementById('apiConfigModal');
+  const cfgApiKey = document.getElementById('cfgApiKey');
+  const btnToggleApiKey = document.getElementById('btnToggleApiKey');
+  const cfgApiKeyStatus = document.getElementById('cfgApiKeyStatus');
+  const cfgBaseUrl = document.getElementById('cfgBaseUrl');
+  const cfgModel = document.getElementById('cfgModel');
+  const cfgQuality = document.getElementById('cfgQuality');
+  const cfgTestResult = document.getElementById('cfgTestResult');
+  const btnTestApiConnection = document.getElementById('btnTestApiConnection');
+  const btnSaveApiConfig = document.getElementById('btnSaveApiConfig');
+  const inspectorStage1Title = document.getElementById('inspectorStage1Title');
+
   const modelStylePromptInput = document.getElementById('modelStylePrompt');
+const seg1ActionSelect = document.getElementById('seg1Action');
+const seg2ActionSelect = document.getElementById('seg2Action');
+const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
   const btnResetStylePrompt = document.getElementById('btnResetStylePrompt');
 
   // Helper: HTML entity escaping
@@ -129,6 +147,151 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 4000);
   }
 
+  // ==========================================
+  // OpenAI / GPT Image 2 API Config Modal Logic
+  // ==========================================
+  let serverConfig = null;
+
+  async function fetchServerConfig() {
+    try {
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        serverConfig = await res.json();
+        updateApiConfigModalFields();
+      }
+    } catch (e) {
+      console.warn('Failed to fetch config:', e);
+    }
+  }
+
+  function updateApiConfigModalFields() {
+    if (!serverConfig) return;
+    if (cfgApiKeyStatus) {
+      if (serverConfig.hasApiKey) {
+        cfgApiKeyStatus.textContent = `已配置 API Key: ${serverConfig.apiKeyMasked}`;
+        cfgApiKeyStatus.style.color = '#2ed573';
+      } else {
+        cfgApiKeyStatus.textContent = '尚未配置 API Key (必填)';
+        cfgApiKeyStatus.style.color = 'var(--text-muted)';
+      }
+    }
+    if (cfgBaseUrl && serverConfig.openaiBaseUrl) {
+      cfgBaseUrl.value = serverConfig.openaiBaseUrl;
+    }
+    if (cfgModel && serverConfig.openaiImageModel) {
+      cfgModel.value = serverConfig.openaiImageModel;
+    }
+    if (cfgQuality && serverConfig.openaiImageQuality) {
+      cfgQuality.value = serverConfig.openaiImageQuality;
+    }
+  }
+
+  function openApiConfigModal() {
+    if (!apiConfigModal) return;
+    apiConfigModal.style.display = 'flex';
+    if (cfgTestResult) {
+      cfgTestResult.style.display = 'none';
+      cfgTestResult.className = 'test-result-box';
+    }
+    fetchServerConfig();
+  }
+
+  function closeApiConfigModal() {
+    if (!apiConfigModal) return;
+    apiConfigModal.style.display = 'none';
+  }
+
+  if (btnOpenApiConfig) btnOpenApiConfig.addEventListener('click', openApiConfigModal);
+  if (btnCloseApiConfig) btnCloseApiConfig.addEventListener('click', closeApiConfigModal);
+  if (apiConfigModal) {
+    apiConfigModal.addEventListener('click', (e) => {
+      if (e.target === apiConfigModal) closeApiConfigModal();
+    });
+  }
+
+  if (btnToggleApiKey) {
+    btnToggleApiKey.addEventListener('click', () => {
+      if (!cfgApiKey) return;
+      const isPwd = cfgApiKey.type === 'password';
+      cfgApiKey.type = isPwd ? 'text' : 'password';
+      btnToggleApiKey.innerHTML = isPwd ? '<i class="ph ph-eye-slash"></i>' : '<i class="ph ph-eye"></i>';
+    });
+  }
+
+  if (btnTestApiConnection) {
+    btnTestApiConnection.addEventListener('click', async () => {
+      const apiKey = cfgApiKey ? cfgApiKey.value.trim() : '';
+      const baseUrl = cfgBaseUrl ? cfgBaseUrl.value.trim() : '';
+      btnTestApiConnection.disabled = true;
+      btnTestApiConnection.innerHTML = '<i class="ph ph-spinner ph-spin"></i> 测试中...';
+      if (cfgTestResult) {
+        cfgTestResult.style.display = 'block';
+        cfgTestResult.className = 'test-result-box info';
+        cfgTestResult.textContent = '正在连接 OpenAI 接口...';
+      }
+      try {
+        const res = await fetch('/api/config/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey, baseUrl })
+        });
+        const data = await res.json();
+        if (cfgTestResult) {
+          cfgTestResult.className = `test-result-box ${data.ok ? 'success' : 'error'}`;
+          cfgTestResult.textContent = data.message || (data.ok ? '连接成功！' : '连接失败');
+        }
+      } catch (err) {
+        if (cfgTestResult) {
+          cfgTestResult.className = 'test-result-box error';
+          cfgTestResult.textContent = `网络错误: ${err.message}`;
+        }
+      } finally {
+        btnTestApiConnection.disabled = false;
+        btnTestApiConnection.innerHTML = '<i class="ph ph-plugs"></i> 测试连接';
+      }
+    });
+  }
+
+  if (btnSaveApiConfig) {
+    btnSaveApiConfig.addEventListener('click', async () => {
+      const apiKey = cfgApiKey ? cfgApiKey.value.trim() : '';
+      const baseUrl = cfgBaseUrl ? cfgBaseUrl.value.trim() : '';
+      const model = cfgModel ? cfgModel.value.trim() : 'gpt-image-2';
+      const quality = cfgQuality ? cfgQuality.value : 'high';
+
+      btnSaveApiConfig.disabled = true;
+      btnSaveApiConfig.innerHTML = '<i class="ph ph-spinner ph-spin"></i> 保存中...';
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            openaiApiKey: apiKey || undefined,
+            openaiBaseUrl: baseUrl || undefined,
+            openaiImageModel: model,
+            openaiImageQuality: quality
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.config) {
+          serverConfig = data.config;
+          if (cfgApiKey) cfgApiKey.value = '';
+          updateApiConfigModalFields();
+          showToast('OpenAI API 配置已保存成功！');
+          closeApiConfigModal();
+        } else {
+          showToast('保存失败: ' + (data.error || '未知错误'), true);
+        }
+      } catch (err) {
+        showToast('保存失败: ' + err.message, true);
+      } finally {
+        btnSaveApiConfig.disabled = false;
+        btnSaveApiConfig.innerHTML = '<i class="ph ph-check"></i> 保存配置';
+      }
+    });
+  }
+
   // Persistence & Storage Keys
   const STORAGE_KEY = 'fashion_ui_user_options_v2';
   const ACTIVE_TASK_KEY = 'fashion_ui_active_task';
@@ -142,18 +305,28 @@ document.addEventListener('DOMContentLoaded', () => {
   // Default Model Style Prompts
   const DEFAULT_STYLE_PROMPTS = {
     female: {
-      classic: 'with high-fashion editorial elegance, chiseled serene facial features, calm composed gaze, naturally closed lips without tension, relaxed natural jawline, and effortless lookbook poise',
-      sweet: 'with clean youthful aesthetic, gentle refined facial features, tranquil poise, naturally closed lips without tension, relaxed natural jawline, and tender serene gaze',
-      athletic: 'with healthy athletic glow, tone-defined posture, calm focused expression, naturally closed lips without tension, relaxed natural jawline, and confident grounded stance',
-      mature: 'with sophisticated executive poise, graceful mature facial structure, naturally closed lips without tension, relaxed natural jawline, and commanding serene presence',
-      cool: 'with modern androgynous edge, chic understated attitude, sharp bone structure, naturally closed lips without tension, relaxed natural jawline, and effortless lookbook poise'
+      classic: 'with sculpted high-fashion supermodel presence, poised regal bearing, composed magnetic gaze, naturally closed lips without tension, and effortless commanding runway posture',
+      sweet: 'with sweet youthful charm, bright sparkling eyes full of gentle warmth, dewy fresh skin, naturally closed lips with a faint serene tenderness, and graceful airy posture',
+      athletic: 'with healthy athletic vitality, sun-kissed glowing skin and toned posture, bright focused determined eyes, naturally closed lips with composed confidence, and grounded energetic stance',
+      mature: 'with commanding mature elegance, knowing confident warmth in the eyes, luminous smooth skin, naturally closed lips with serene authority, and statuesque poised posture',
+      cool: 'with chic androgynous edge, sharp minimal attitude, cool detached yet engaged gaze, naturally closed lips without tension, and effortless nonchalant posture',
+      youthful: 'with lively youthful energy, bright sparkling eyes radiating cheerful vitality, fresh glowing skin, naturally closed lips with a bright cheerful spirit, and light springy posture',
+      intellectual: 'with gentle intellectual grace, serene thoughtful eyes carrying quiet depth, soft minimal styling, clean natural makeup look, naturally closed lips with calm composure, and understated elegant posture',
+      french: 'with effortless Parisian chic, relaxed romantic air, naturally glowing minimal makeup, warm subtle gaze, naturally closed lips with serene charm, and breezy nonchalant elegance in posture',
+      retro: 'with 1990s Hong Kong cinematic glamour, luminous warm skin, magnetic star-quality gaze, naturally closed lips with poised mystique, and iconic timeless posture',
+      petite: 'with petite adorable charm, small slim frame and fine-boned delicate figure, big bright expressive eyes, smooth dewy skin, naturally closed lips with playful cuteness, and cute perky posture',
     },
     male: {
-      classic: 'with sharp defined jawline, European high-fashion charisma, calm composed gaze, naturally closed lips without tension, relaxed jawline, and natural confident posture',
-      sweet: 'with clean youthful Korean lookbook charm, refined gentle features, relaxed natural poise, naturally closed lips without tension, and subtle calm gaze',
-      athletic: 'with athletic toned build, sharp defined facial structure, calm focused gaze, naturally closed lips without tension, and upright confident stance',
-      mature: 'with distinguished mature charisma, sharp masculine features, naturally closed lips without tension, and commanding executive posture',
-      cool: 'with contemporary streetwear edge, cool understated attitude, sharp jawline, naturally closed lips without tension, and effortless confident posture'
+      classic: 'with high-fashion supermodel charisma, composed magnetic gaze, naturally closed lips without tension, and commanding runway posture',
+      sweet: 'with clean boyish charm, soft warm eye expression, fresh dewy skin, naturally closed lips without tension, and light approachable posture',
+      athletic: 'with athletic vigor, toned build and sun-kissed skin, sharp focused gaze, naturally closed lips without tension, and upright powerful stance',
+      mature: 'with distinguished executive presence, calm assured gaze, naturally closed lips without tension, and commanding confident posture',
+      cool: 'with contemporary streetwear edge, understated cool attitude, naturally closed lips without tension, and relaxed confident posture',
+      youthful: 'with sunny youthful energy, bright lively eyes and fresh open expression, glowing healthy skin, naturally closed lips without tension, and light energetic posture',
+      intellectual: 'with refined scholarly warmth, calm thoughtful gaze and gentle steady presence, clean minimal styling, naturally closed lips without tension, and composed graceful posture',
+      french: 'with relaxed Parisian elegance, easygoing romantic air, warm understated gaze, naturally closed lips without tension, and breezy confident posture',
+      retro: 'with 1990s Hong Kong cinematic charisma, luminous warm skin, magnetic film-star gaze, naturally closed lips without tension, and iconic screen-presence posture',
+      petite: 'with cute boyish charm, small lean frame, bright lively eyes, fresh clear skin, naturally closed lips without tension, and playful relaxed posture',
     }
   };
 
@@ -309,6 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
       const modelStyle = document.querySelector('input[name="modelStyle"]:checked')?.value || 'classic';
       const aspectRatio = document.querySelector('input[name="aspectRatio"]:checked')?.value || '3:4';
+      const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'krea2';
       const genMode = document.querySelector('input[name="genMode"]:checked')?.value || 'video';
       const customScene = customSceneText ? customSceneText.value : '';
       const customPrompt = customPromptInput ? customPromptInput.value : '';
@@ -319,7 +493,12 @@ document.addEventListener('DOMContentLoaded', () => {
         gender,
         modelStyle,
         aspectRatio,
+        stillEngine,
         genMode,
+        seg1Action,
+        seg2Action,
+        hairStyle,
+        faceShape,
         customPrompt,
         imageSource: uploadedFile ? 'upload' : (selectedImage ? 'preset' : null),
         selectedPresetImg: selectedImage || null,
@@ -414,8 +593,29 @@ document.addEventListener('DOMContentLoaded', () => {
       const el = document.querySelector(`input[name="aspectRatio"][value="${opts.aspectRatio}"]`);
       if (el) el.checked = true;
     }
+    if (opts.stillEngine) {
+      const el = document.querySelector(`input[name="stillEngine"][value="${opts.stillEngine}"]`);
+      if (el) el.checked = true;
+      updateStillEngineUI();
+    }
     if (opts.genMode) {
       const el = document.querySelector(`input[name="genMode"][value="${opts.genMode}"]`);
+      if (el) el.checked = true;
+    }
+
+    // 5.5 Video action selects (options are populated by syncActionsFromServer before restore)
+    if (seg1ActionSelect && opts.seg1Action) seg1ActionSelect.value = opts.seg1Action;
+    if (seg2ActionSelect && opts.seg2Action) seg2ActionSelect.value = opts.seg2Action;
+    if (seg1ActionSelect && seg1ActionSelect.selectedIndex === -1) seg1ActionSelect.value = DEFAULT_ACTIONS.seg1;
+    if (seg2ActionSelect && seg2ActionSelect.selectedIndex === -1) seg2ActionSelect.value = DEFAULT_ACTIONS.seg2;
+
+    // 5.6 Hair & face shape radios
+    if (opts.hairStyle) {
+      const el = document.querySelector('input[name="hairStyle"][value="' + opts.hairStyle + '"]');
+      if (el) el.checked = true;
+    }
+    if (opts.faceShape) {
+      const el = document.querySelector('input[name="faceShape"][value="' + opts.faceShape + '"]');
       if (el) el.checked = true;
     }
 
@@ -541,7 +741,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function updateStillEngineUI() {
+    const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'krea2';
+    const inspectorStage1Title = document.getElementById('inspectorStage1Title');
+    if (inspectorStage1Title) {
+      inspectorStage1Title.textContent = stillEngine === 'gpt_image_2'
+        ? '阶段一：GPT Image 2 参考底图提示词'
+        : '阶段一：Krea-2 试衣定妆照生图提示词';
+    }
+  }
+
   // 2. Load Scenes
+  async function syncActionsFromServer() {
+    if (!seg1ActionSelect || !seg2ActionSelect) return;
+    try {
+      const res = await fetch('/api/actions');
+      const actions = await res.json();
+      const prev = { seg1: seg1ActionSelect.value, seg2: seg2ActionSelect.value };
+      for (const sel of [seg1ActionSelect, seg2ActionSelect]) {
+        sel.innerHTML = '<option value="random">🎲 随机</option>' +
+          actions.map(a => '<option value="' + a.id + '">' + a.name + '</option>').join('');
+      }
+      seg1ActionSelect.value = prev.seg1 || DEFAULT_ACTIONS.seg1;
+      seg2ActionSelect.value = prev.seg2 || DEFAULT_ACTIONS.seg2;
+      if (seg1ActionSelect.selectedIndex === -1) seg1ActionSelect.value = DEFAULT_ACTIONS.seg1;
+      if (seg2ActionSelect.selectedIndex === -1) seg2ActionSelect.value = DEFAULT_ACTIONS.seg2;
+    } catch (e) {
+      console.warn('Failed to load actions:', e);
+    }
+  }
+
   async function loadScenes() {
     try {
       const res = await fetch('/api/scenes');
@@ -883,6 +1112,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (radio.name === 'gender' || radio.name === 'modelStyle') {
         updateModelStylePromptUI();
       }
+      if (radio.name === 'stillEngine') {
+        updateStillEngineUI();
+        const curEngine = document.querySelector('input[name="stillEngine"]:checked')?.value;
+        if (curEngine === 'gpt_image_2' && serverConfig && !serverConfig.hasApiKey) {
+          showToast('💡 提示：GPT Image 2 尚未配置 API Key，请点击「配置 API」设置。');
+        }
+      }
       saveUserOptions();
       updateBatchHint();
       queueRefreshPromptInspector();
@@ -997,6 +1233,10 @@ document.addEventListener('DOMContentLoaded', () => {
           model_style: modelStyle,
           model_style_prompt: modelStylePrompt,
           custom_scene: selectedScene === 'custom' ? customScene : '',
+          action1: seg1ActionSelect ? seg1ActionSelect.value : DEFAULT_ACTIONS.seg1,
+          action2: seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2,
+          hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
+          face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
           custom_prompt: customPrompt,
           model_image: hasModelImg ? 'placeholder_model.png' : null,
           scene_image: hasSceneImg ? 'placeholder_scene.png' : null
@@ -1192,6 +1432,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'krea2';
+      if (stillEngine === 'gpt_image_2' && serverConfig && !serverConfig.hasApiKey) {
+        showToast('请先配置 OpenAI API Key 才能使用 GPT Image 2 引擎。', true);
+        openApiConfigModal();
+        return;
+      }
+
       setButtonsDisabled(true);
       stopActiveVideoPlayback();
 
@@ -1272,9 +1519,14 @@ document.addEventListener('DOMContentLoaded', () => {
           custom_prompt: customPrompt,
           aspect_ratio: aspectRatio,
           mode: genMode,
+          still_engine: stillEngine,
           krea_prompt: kreaDiff ? inspectorKreaPrompt.value.trim() : null,
           seg1_prompt: seg1Diff ? inspectorSeg1Prompt.value.trim() : null,
-          seg2_prompt: seg2Diff ? inspectorSeg2Prompt.value.trim() : null
+          seg2_prompt: seg2Diff ? inspectorSeg2Prompt.value.trim() : null,
+          action1: seg1ActionSelect ? seg1ActionSelect.value : DEFAULT_ACTIONS.seg1,
+          action2: seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2,
+          hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
+          face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
         })
       });
       let genData;
@@ -1311,6 +1563,13 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
+        const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'krea2';
+        if (stillEngine === 'gpt_image_2' && serverConfig && !serverConfig.hasApiKey) {
+          showToast('请先配置 OpenAI API Key 才能使用 GPT Image 2 引擎。', true);
+          openApiConfigModal();
+          return;
+        }
+
         setButtonsDisabled(true);
         stopActiveVideoPlayback();
 
@@ -1318,6 +1577,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const batchSceneNames = batchScenes.map(id => BATCH_SCENE_LABELS[id] || id).join('、');
 
         const genMode = document.querySelector('input[name="genMode"]:checked')?.value || 'video';
+        const seg1Action = seg1ActionSelect ? seg1ActionSelect.value : DEFAULT_ACTIONS.seg1;
+        const seg2Action = seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2;
+        const hairStyle = document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural';
+        const faceShape = document.querySelector('input[name="faceShape"]:checked')?.value || 'oval';
         const isStillOnly = genMode === 'still_only';
 
         // Reset showcase view for batch execution
@@ -1386,9 +1649,14 @@ document.addEventListener('DOMContentLoaded', () => {
             custom_scene: customScene,
             aspect_ratio: aspectRatio,
             mode: genMode,
+            still_engine: stillEngine,
             krea_prompt: kreaDiff ? inspectorKreaPrompt.value.trim() : null,
             seg1_prompt: seg1Diff ? inspectorSeg1Prompt.value.trim() : null,
-            seg2_prompt: seg2Diff ? inspectorSeg2Prompt.value.trim() : null
+            seg2_prompt: seg2Diff ? inspectorSeg2Prompt.value.trim() : null,
+            action1: seg1ActionSelect ? seg1ActionSelect.value : DEFAULT_ACTIONS.seg1,
+            action2: seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2,
+            hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
+            face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
           })
         });
         let batchResp;
@@ -2050,11 +2318,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnRefreshHistory.addEventListener('click', loadHistory);
 
-  // App Initialization Sequence: restore options -> sync styles -> load scene cards -> check in-flight tasks -> load history
+  // App Initialization Sequence: sync actions -> restore options -> sync styles -> load scene cards -> check in-flight tasks -> load history
   (async () => {
+    if (seg1ActionSelect) seg1ActionSelect.addEventListener('change', saveUserOptions);
+    if (seg2ActionSelect) seg2ActionSelect.addEventListener('change', saveUserOptions);
+    await fetchServerConfig();
+    await syncActionsFromServer();
     await restoreUserOptions();
     await syncModelStylesFromServer();
     updateModelStylePromptUI();
+    updateStillEngineUI();
     await loadScenes();
     await checkActiveTaskOnLoad();
     loadHistory();

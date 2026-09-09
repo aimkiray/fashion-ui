@@ -12,3 +12,8 @@ Thumbs.db
 .idea/
 __pycache__/
 *.pyc
+
+# Local Credentials & Configs
+config.json
+.env
+.env.local

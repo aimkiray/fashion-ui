@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Fashion Studio | 服装动态展示视频生成</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -145,22 +146,22 @@
         <div class="options-row">
           <!-- Gender / Model Selector -->
           <div class="option-group">
-            <label>模特类型</label>
+            <label>模特性别</label>
             <div class="radio-pills">
               <label class="pill-label">
                 <input type="radio" name="gender" value="female" checked>
-                <span>时尚女模</span>
+                <span>女生</span>
               </label>
               <label class="pill-label">
                 <input type="radio" name="gender" value="male">
-                <span>潮流男模</span>
+                <span>男生</span>
               </label>
             </div>
           </div>
 
           <div class="option-group">
             <label>模特风格</label>
-            <div class="radio-pills">
+            <div class="radio-pills style-pills-grid">
               <label class="pill-label">
                 <input type="radio" name="modelStyle" value="classic" checked>
                 <span>高级名模</span>
@@ -181,6 +182,26 @@
                 <input type="radio" name="modelStyle" value="cool">
                 <span>中性酷感</span>
               </label>
+              <label class="pill-label">
+                <input type="radio" name="modelStyle" value="youthful">
+                <span>元气阳光</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelStyle" value="intellectual">
+                <span>温柔知性</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelStyle" value="french">
+                <span>法式浪漫</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelStyle" value="retro">
+                <span>复古港风</span>
+              </label>
+                <label class="pill-label">
+                  <input type="radio" name="modelStyle" value="petite">
+                  <span>小巧可爱</span>
+                </label>
             </div>
             <!-- Model Style Prompt Box -->
             <div class="style-prompt-box">
@@ -201,6 +222,66 @@
           </div>
 
           <div class="option-group">
+            <label>发型</label>
+            <div class="radio-pills pills-grid-3">
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="natural" checked>
+                <span>长发披肩</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="wavy">
+                <span>大波浪</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="ponytail">
+                <span>高马尾</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="bob">
+                <span>齐脖波波头</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="bun">
+                <span>低盘发</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="pixie">
+                <span>利落短发</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="option-group">
+            <label>脸型</label>
+            <div class="radio-pills pills-grid-3">
+              <label class="pill-label">
+                <input type="radio" name="faceShape" value="oval" checked>
+                <span>鹅蛋脸</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="faceShape" value="vline">
+                <span>小V脸</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="faceShape" value="round">
+                <span>圆润脸</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="faceShape" value="square">
+                <span>立体方脸</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="faceShape" value="heart">
+                <span>心形脸</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="faceShape" value="long">
+                <span>清瘦长脸</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="option-group">
             <label>画幅比例</label>
             <div class="radio-pills">
               <label class="pill-label">
@@ -214,6 +295,35 @@
               <label class="pill-label">
                 <input type="radio" name="aspectRatio" value="1:1">
                 <span>1:1 (电商正方)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="option-group">
+            <label>视频动作（分镜一 → 分镜二）</label>
+            <div class="action-selects">
+              <select id="seg1Action" class="action-select" title="分镜一动作"></select>
+              <span class="action-arrow">→</span>
+              <select id="seg2Action" class="action-select" title="分镜二动作"></select>
+            </div>
+            <p class="action-hint">两个分镜可自由组合；选择「随机」每次生成自动抽取不同动作，避免千篇一律</p>
+          </div>
+
+          <div class="option-group">
+            <div class="option-header-row">
+              <label>参考底图引擎 (定妆照)</label>
+              <button type="button" class="btn-config-link" id="btnOpenApiConfig" title="配置 OpenAI API Key 与端点">
+                <i class="ph ph-gear"></i> 配置 API
+              </button>
+            </div>
+            <div class="radio-pills">
+              <label class="pill-label">
+                <input type="radio" name="stillEngine" value="krea2" checked>
+                <span><i class="ph ph-cpu"></i> Krea-2 (本地显卡)</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="stillEngine" value="gpt_image_2">
+                <span><i class="ph ph-sparkle"></i> GPT Image 2 (OpenAI)</span>
               </label>
             </div>
           </div>
@@ -310,7 +420,7 @@
                   <div class="inspector-field-header">
                     <label for="inspectorKreaPrompt">
                       <i class="ph ph-camera"></i>
-                      <span>阶段一：Krea-2 试衣定妆照生图提示词</span>
+                      <span id="inspectorStage1Title">阶段一：Krea-2 试衣定妆照生图提示词</span>
                     </label>
                     <span class="inspector-field-badge" id="badgeKreaPrompt">自动</span>
                   </div>
@@ -482,6 +592,54 @@
     <div class="modal-content">
       <img id="lightboxImg" src="" alt="大图预览">
       <button class="modal-close" id="btnCloseLightbox"><i class="ph ph-x"></i></button>
+    </div>
+  </div>
+
+  <!-- API Configuration Modal -->
+  <div class="modal-overlay" id="apiConfigModal" style="display: none;">
+    <div class="modal-card api-config-card">
+      <div class="modal-header">
+        <h3><i class="ph ph-sliders"></i> GPT Image 2 / OpenAI API 配置</h3>
+        <button type="button" class="modal-close" id="btnCloseApiConfig"><i class="ph ph-x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">通过 OpenAI 官方或兼容中转代理接入 <strong>GPT Image 2</strong> 生成高保真试衣参考底图。配置安全保存于服务端本地。</p>
+        
+        <div class="form-group">
+          <label for="cfgApiKey">OpenAI API Key <span class="required">*</span></label>
+          <div class="input-with-action">
+            <input type="password" id="cfgApiKey" class="input-text" placeholder="sk-..." autocomplete="off">
+            <button type="button" class="btn-toggle-pwd" id="btnToggleApiKey" title="显示/隐藏"><i class="ph ph-eye"></i></button>
+          </div>
+          <span class="field-hint" id="cfgApiKeyStatus">尚未配置 API Key</span>
+        </div>
+
+        <div class="form-group">
+          <label for="cfgBaseUrl">API Base URL (接口端点)</label>
+          <input type="text" id="cfgBaseUrl" class="input-text" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
+          <span class="field-hint">支持官方端点或第三方中转反代（若包含 /v1 请保留）</span>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="cfgModel">模型代号</label>
+            <input type="text" id="cfgModel" class="input-text" value="gpt-image-2">
+          </div>
+          <div class="form-group">
+            <label for="cfgQuality">图像质量</label>
+            <select id="cfgQuality" class="select-field">
+              <option value="high" selected>high (高画质)</option>
+              <option value="standard">standard (标准)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="test-result-box" id="cfgTestResult" style="display: none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="btnTestApiConnection"><i class="ph ph-plugs"></i> 测试连接</button>
+        <button type="button" class="btn-primary" id="btnSaveApiConfig"><i class="ph ph-check"></i> 保存配置</button>
+      </div>
     </div>
   </div>
 
