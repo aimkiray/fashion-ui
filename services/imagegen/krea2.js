@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { uploadToComfyInput, downloadFromComfy } = require('./../comfyFiles');
 
 function nextNodeId(wf) {
   const ids = Object.keys(wf).map(Number).filter(n => !isNaN(n) && n > 0);
@@ -17,6 +18,8 @@ async function generateKrea2({
   projectImageDir,
   comfyTempInputDir,
   comfyOutputDir,
+  comfyRemote,
+  comfyUrl,
   workflowsDir,
   aspectCanvas,
   randomSeed,
@@ -33,11 +36,19 @@ async function generateKrea2({
   const tempInputFile = `temp_in_${taskId}_${path.basename(task.image)}`;
   const srcInputPath = path.join(projectInputDir, task.image);
   const dstTempInputPath = path.join(comfyTempInputDir, tempInputFile);
+  // Remote mode stages via the ComfyUI HTTP API; the workflow reference is
+  // the same `online_temp/<name>` form in both modes.
+  let stagedInputRef = `online_temp/${tempInputFile}`;
 
   if (!fs.existsSync(srcInputPath)) {
     throw new Error(`找不到上传的原始服装图片: ${task.image}`);
   }
-  fs.copyFileSync(srcInputPath, dstTempInputPath);
+  if (comfyRemote) {
+    const up = await uploadToComfyInput(srcInputPath, { comfyUrl });
+    stagedInputRef = `online_temp/${up.name}`;
+  } else {
+    fs.copyFileSync(srcInputPath, dstTempInputPath);
+  }
 
   let dstTempModelPath = null;
   let dstTempScenePath = null;
@@ -54,7 +65,7 @@ async function generateKrea2({
 
     const kreaWf = JSON.parse(fs.readFileSync(kreaWfPath, 'utf-8'));
     requireNodes(kreaWf, 'Krea-2', ['5', '7', '9', '11', '13']);
-    kreaWf['5']['inputs']['image'] = `online_temp/${tempInputFile}`;
+    kreaWf['5']['inputs']['image'] = stagedInputRef;
     kreaWf['9']['inputs']['prompt'] = prompt;
 
     if (kreaWf['9']) {
@@ -107,13 +118,20 @@ async function generateKrea2({
     if (task.model_image) {
       const srcModelPath = path.join(projectInputDir, task.model_image);
       if (fs.existsSync(srcModelPath)) {
-        dstTempModelPath = path.join(comfyTempInputDir, tempModelFile);
-        fs.copyFileSync(srcModelPath, dstTempModelPath);
-
-        kreaWf['20'] = {
-          class_type: 'LoadImage',
-          inputs: { image: `online_temp/${tempModelFile}` }
-        };
+        if (comfyRemote) {
+          const up = await uploadToComfyInput(srcModelPath, { comfyUrl });
+          kreaWf['20'] = {
+            class_type: 'LoadImage',
+            inputs: { image: `online_temp/${up.name}` }
+          };
+        } else {
+          dstTempModelPath = path.join(comfyTempInputDir, tempModelFile);
+          fs.copyFileSync(srcModelPath, dstTempModelPath);
+          kreaWf['20'] = {
+            class_type: 'LoadImage',
+            inputs: { image: `online_temp/${tempModelFile}` }
+          };
+        }
         kreaWf['21'] = {
           class_type: 'VAEEncode',
           inputs: { pixels: ['20', 0], vae: ['3', 0] }
@@ -133,13 +151,17 @@ async function generateKrea2({
     } else if (task.scene_image) {
       const srcScenePath = path.join(projectInputDir, task.scene_image);
       if (fs.existsSync(srcScenePath)) {
-        dstTempScenePath = path.join(comfyTempInputDir, tempSceneFile);
-        fs.copyFileSync(srcScenePath, dstTempScenePath);
-
-        kreaWf['5']['inputs']['image'] = `online_temp/${tempSceneFile}`;
+        if (comfyRemote) {
+          const up = await uploadToComfyInput(srcScenePath, { comfyUrl });
+          kreaWf['5']['inputs']['image'] = `online_temp/${up.name}`;
+        } else {
+          dstTempScenePath = path.join(comfyTempInputDir, tempSceneFile);
+          fs.copyFileSync(srcScenePath, dstTempScenePath);
+          kreaWf['5']['inputs']['image'] = `online_temp/${tempSceneFile}`;
+        }
         kreaWf['20'] = {
           class_type: 'LoadImage',
-          inputs: { image: `online_temp/${tempInputFile}` }
+          inputs: { image: stagedInputRef }
         };
         kreaWf['21'] = {
           class_type: 'VAEEncode',
@@ -180,14 +202,17 @@ async function generateKrea2({
 
     const stillRawFilename = kreaOutImgs[0].filename;
     const stillSubfolder = kreaOutImgs[0].subfolder || '';
-    const srcStillPath = path.join(comfyOutputDir, stillSubfolder, stillRawFilename);
     const savedStillName = `krea_${task.scene.id || 'scene'}_${taskId}.png`;
     const destStillPath = path.join(projectImageDir, savedStillName);
-    fs.copyFileSync(srcStillPath, destStillPath);
-
-    try {
-      if (fs.existsSync(srcStillPath)) fs.unlinkSync(srcStillPath);
-    } catch (e) {}
+    if (comfyRemote) {
+      await downloadFromComfy({ filename: stillRawFilename, subfolder: stillSubfolder, type: 'output' }, destStillPath, comfyUrl);
+    } else {
+      const srcStillPath = path.join(comfyOutputDir, stillSubfolder, stillRawFilename);
+      fs.copyFileSync(srcStillPath, destStillPath);
+      try {
+        if (fs.existsSync(srcStillPath)) fs.unlinkSync(srcStillPath);
+      } catch (e) {}
+    }
 
     if (typeof onProgress === 'function') {
       onProgress(40, '阶段一完成，定妆照已生成。');
@@ -199,12 +224,16 @@ async function generateKrea2({
       webUrl: `/outputs/images/${savedStillName}`
     };
   } finally {
-    // Clean up temporary files
-    try {
-      if (fs.existsSync(dstTempInputPath)) fs.unlinkSync(dstTempInputPath);
-      if (dstTempModelPath && fs.existsSync(dstTempModelPath)) fs.unlinkSync(dstTempModelPath);
-      if (dstTempScenePath && fs.existsSync(dstTempScenePath)) fs.unlinkSync(dstTempScenePath);
-    } catch (e) {}
+    // Clean up temporary files. In remote mode the staged files live inside
+    // the ComfyUI installation on another machine and ComfyUI has no delete
+    // API — they are left there (online_temp) instead of being unlinked.
+    if (!comfyRemote) {
+      try {
+        if (fs.existsSync(dstTempInputPath)) fs.unlinkSync(dstTempInputPath);
+        if (dstTempModelPath && fs.existsSync(dstTempModelPath)) fs.unlinkSync(dstTempModelPath);
+        if (dstTempScenePath && fs.existsSync(dstTempScenePath)) fs.unlinkSync(dstTempScenePath);
+      } catch (e) {}
+    }
   }
 }
 

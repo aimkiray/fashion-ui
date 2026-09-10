@@ -8,11 +8,18 @@ const { randomUUID: uuidv4 } = require('crypto');
 const os = require('os');
 const { getSafeConfig, saveConfig, testOpenAiConnection } = require('./services/config');
 const { generateReferenceImage } = require('./services/imagegen');
+const { uploadToComfyInput, downloadFromComfy, comfyViewExists } = require('./services/comfyFiles');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const COMFY_URL = process.env.COMFY_URL || 'http://127.0.0.1:8188';
 const COMFY_WS_URL = COMFY_URL.replace(/^http/, 'ws');
+// COMFY_REMOTE=1: this app runs on a different machine than ComfyUI — stage
+// workflow inputs and fetch outputs through the ComfyUI HTTP API
+// (/upload/image, /view) instead of direct filesystem access. Note: ComfyUI
+// exposes no delete API, so online_temp staging files accumulate on the
+// ComfyUI host in this mode.
+const COMFY_REMOTE = process.env.COMFY_REMOTE === '1';
 
 // Backend ComfyUI Paths (for execution only)
 const COMFY_DIR = path.resolve(process.env.COMFY_DIR || 'D:/Comfy/ComfyUI');
@@ -34,9 +41,9 @@ const PROJECT_VIDEO_DIR = path.join(PROJECT_OUTPUT_DIR, 'videos');
 const PROJECT_IMAGE_DIR = path.join(PROJECT_OUTPUT_DIR, 'images');
 
 // Ensure all isolated and temporary directories exist
+// (remote mode: ComfyUI dirs live on another machine — skip creating them locally)
 [
-  COMFY_TEMP_INPUT_DIR,
-  COMFY_TEMP_OUTPUT_DIR,
+  ...(COMFY_REMOTE ? [] : [COMFY_TEMP_INPUT_DIR, COMFY_TEMP_OUTPUT_DIR]),
   STORAGE_DIR,
   PROJECT_INPUT_DIR,
   PROJECT_OUTPUT_DIR,
@@ -1466,9 +1473,12 @@ async function runGenerationJob(taskId) {
     ? (cleanCustomScene ? `自定义场景: ${cleanCustomScene.slice(0, 16)}` : '自定义专属场景')
     : task.scene.name;
 
-  // File paths to track for reliable cleanup
+  // File paths to track for reliable cleanup. Remote mode: conform to a local
+  // temp file first, then upload it to the remote ComfyUI input tree.
   const stagedH3Name = `staged_${taskId}.png`;
-  const dstStagedH3Path = path.join(COMFY_TEMP_INPUT_DIR, stagedH3Name);
+  const dstStagedH3Path = COMFY_REMOTE
+    ? path.join(os.tmpdir(), `fashion_${stagedH3Name}`)
+    : path.join(COMFY_TEMP_INPUT_DIR, stagedH3Name);
 
   // Shared generation canvas for both stages (services/imagegen re-derives it internally for the krea path)
   let canvas = ASPECT_CANVAS[task.aspect_ratio] || ASPECT_CANVAS['3:4'];
@@ -1520,6 +1530,8 @@ async function runGenerationJob(taskId) {
           projectImageDir: PROJECT_IMAGE_DIR,
           comfyTempInputDir: COMFY_TEMP_INPUT_DIR,
           comfyOutputDir: COMFY_OUTPUT_DIR,
+          comfyRemote: COMFY_REMOTE,
+          comfyUrl: COMFY_URL,
           workflowsDir: WORKFLOWS_DIR,
           aspectCanvas: ASPECT_CANVAS,
           randomSeed,
@@ -1552,11 +1564,16 @@ async function runGenerationJob(taskId) {
     task.message = `[阶段二] 正在加载视频生成模型（${segActionNames}）...`;
 
     // Stage still image into ComfyUI temp input for MiniMax H3 (conforming dimensions if necessary)
+    let stagedImageRef = `online_temp/${stagedH3Name}`;
     conformImageToCanvas(stillResult.destPath, dstStagedH3Path, canvas.width, canvas.height);
+    if (COMFY_REMOTE) {
+      const up = await uploadToComfyInput(dstStagedH3Path, { comfyUrl: COMFY_URL });
+      stagedImageRef = `online_temp/${up.name}`;
+    }
 
     const h3Wf = JSON.parse(fs.readFileSync(h3WfPath, 'utf-8'));
     requireNodes(h3Wf, 'MiniMax H3', ['1', '40', '41', '80', '81', '84']);
-    h3Wf['1']['inputs']['image'] = `online_temp/${stagedH3Name}`;
+    h3Wf['1']['inputs']['image'] = stagedImageRef;
 
     // Overwrite the ResolutionSelector links with the same canvas used by Stage 1
     // so both segments and the staged first frame share identical dimensions
@@ -1608,11 +1625,27 @@ async function runGenerationJob(taskId) {
       }
     }
 
-    // Fallback retry loop in COMFY_TEMP_OUTPUT_DIR
+    // Fallback when history did not report the output file (VHS may finalize
+    // the mp4 slightly after the prompt completes). Local mode scans the
+    // ComfyUI output dir; remote mode polls /view for the expected names.
     if (!finalVideoFilename) {
       const searchPrefix = `outfit_${task.scene.id}_10s_${taskId}`;
       for (let retry = 0; retry < 50; retry++) {
-        if (fs.existsSync(COMFY_TEMP_OUTPUT_DIR)) {
+        if (COMFY_REMOTE) {
+          const candidates = [
+            `${searchPrefix}-audio.mp4`,
+            `${searchPrefix}_00001-audio.mp4`,
+            `${searchPrefix}.mp4`,
+            `${searchPrefix}_00001.mp4`
+          ].map(f => ({ filename: f, subfolder: 'online_temp', type: 'output' }));
+          for (const cand of candidates) {
+            if (await comfyViewExists(cand, COMFY_URL)) {
+              finalVideoFilename = cand.filename;
+              finalVideoSubfolder = 'online_temp';
+              break;
+            }
+          }
+        } else if (fs.existsSync(COMFY_TEMP_OUTPUT_DIR)) {
           const outFiles = fs.readdirSync(COMFY_TEMP_OUTPUT_DIR).filter(f => f.startsWith(searchPrefix));
           const audioMp4 = outFiles.find(f => f.endsWith('-audio.mp4'));
           const plainMp4 = outFiles.find(f => f.endsWith('.mp4'));
@@ -1621,6 +1654,7 @@ async function runGenerationJob(taskId) {
             break;
           }
         }
+        if (finalVideoFilename) break;
         await new Promise(r => setTimeout(r, 600));
       }
     }
@@ -1630,14 +1664,22 @@ async function runGenerationJob(taskId) {
     }
 
     // Move / copy video and preview thumbnail to PROJECT_VIDEO_DIR (project storage)
-    const srcVideoPath = path.join(COMFY_OUTPUT_DIR, finalVideoSubfolder, finalVideoFilename);
     const dstVideoPath = path.join(PROJECT_VIDEO_DIR, finalVideoFilename);
-    fs.copyFileSync(srcVideoPath, dstVideoPath);
-
     const previewName = finalVideoFilename.replace(/-audio\.mp4$|\.mp4$/, '.png');
-    const srcPreviewPath = path.join(COMFY_OUTPUT_DIR, finalVideoSubfolder, previewName);
-    if (fs.existsSync(srcPreviewPath)) {
-      fs.copyFileSync(srcPreviewPath, path.join(PROJECT_VIDEO_DIR, previewName));
+    if (COMFY_REMOTE) {
+      const srcRef = { filename: finalVideoFilename, subfolder: finalVideoSubfolder || 'online_temp', type: 'output' };
+      await downloadFromComfy(srcRef, dstVideoPath, COMFY_URL);
+      // Preview thumbnail is optional — tolerate its absence
+      try {
+        await downloadFromComfy({ ...srcRef, filename: previewName }, path.join(PROJECT_VIDEO_DIR, previewName), COMFY_URL);
+      } catch (e) {}
+    } else {
+      const srcVideoPath = path.join(COMFY_OUTPUT_DIR, finalVideoSubfolder, finalVideoFilename);
+      fs.copyFileSync(srcVideoPath, dstVideoPath);
+      const srcPreviewPath = path.join(COMFY_OUTPUT_DIR, finalVideoSubfolder, previewName);
+      if (fs.existsSync(srcPreviewPath)) {
+        fs.copyFileSync(srcPreviewPath, path.join(PROJECT_VIDEO_DIR, previewName));
+      }
     }
 
     task.videoUrl = `/outputs/videos/${finalVideoFilename}`;
@@ -1653,14 +1695,17 @@ async function runGenerationJob(taskId) {
     // every other file this task produced in the temp/output directories.
     try {
       if (dstStagedH3Path && fs.existsSync(dstStagedH3Path)) fs.unlinkSync(dstStagedH3Path);
-      // Scan temp dir AND output root — all files this task produced carry the taskId
-      for (const outDir of [COMFY_TEMP_OUTPUT_DIR, COMFY_OUTPUT_DIR]) {
-        if (!fs.existsSync(outDir)) continue;
-        const remaining = fs.readdirSync(outDir).filter(f => f.includes(taskId));
-        for (const f of remaining) {
-          try {
-            fs.unlinkSync(path.join(outDir, f));
-          } catch(e) {}
+      // Scan temp dir AND output root — all files this task produced carry the taskId.
+      // Remote mode: the files live on the ComfyUI host and there is no delete API.
+      if (!COMFY_REMOTE) {
+        for (const outDir of [COMFY_TEMP_OUTPUT_DIR, COMFY_OUTPUT_DIR]) {
+          if (!fs.existsSync(outDir)) continue;
+          const remaining = fs.readdirSync(outDir).filter(f => f.includes(taskId));
+          for (const f of remaining) {
+            try {
+              fs.unlinkSync(path.join(outDir, f));
+            } catch(e) {}
+          }
         }
       }
     } catch(e) {
