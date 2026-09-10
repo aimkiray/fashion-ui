@@ -78,12 +78,19 @@ function computeTaskPrompts({
   const { action1: a1, action2: a2 } = resolveActions(action1, action2, sceneConfig.id);
   kreaPrompt = injectActionProps(kreaPrompt, a1, a2);
 
-  // 道具仅由 seg2 触发时（a1 非道具动作），seg1 提示词也要锚定道具存在，
-  // 防止定妆照中的道具在 seg1 期间凭空消失、seg2 又需要它。
+  // 道具/环境物仅由 seg2 触发时（a1 不涉及），seg1 提示词也要锚定它们的存在：
+  // 定妆照对两个分镜共享首帧，seg1 不提它们，H3 可能中途删掉、seg2 又需要。
   let seg1Extra = cleanCustom;
+  const keepHints = [];
   if (!PROP_ACTIONS.includes(a1) && PROP_ACTIONS.includes(a2)) {
-    const propKeep = '画面中出现的道具（咖啡杯、手机或挎包）保持自然稳定，不凭空消失或变形。';
-    seg1Extra = seg1Extra ? `${seg1Extra}\n${propKeep}` : propKeep;
+    keepHints.push('画面中出现的道具（咖啡杯、手机或挎包）保持自然稳定，不凭空消失或变形。');
+  }
+  if (!ENV_PROPS.includes(a1) && ENV_PROPS.includes(a2)) {
+    keepHints.push('画面中出现的场景物件（长椅或玻璃橱窗）保持自然稳定，不凭空消失、不变形、不移位。');
+  }
+  if (keepHints.length) {
+    const keepText = keepHints.join('');
+    seg1Extra = seg1Extra ? `${seg1Extra}\n${keepText}` : keepText;
   }
 
   return {
@@ -143,8 +150,8 @@ const PROP_COMBOS = {
 // （= 视频首帧），H3 才不会让它们在视频中凭空出现。
 const ENV_PROPS = ['bench_sit', 'window_browse'];
 const SCENE_PROPS = {
-  bench_sit: 'A simple wooden bench at sitting height stands naturally beside the model in the scene, positioned clear of the figure and fully visible.',
-  window_browse: 'A large glass display window with tastefully arranged items stands beside the model in the scene.'
+  bench_sit: 'A simple wooden bench at sitting height stands naturally beside the model in the scene, positioned clear of the figure and fully visible',
+  window_browse: 'A large glass display window with tastefully arranged items stands beside the model in the scene'
 };
 
 function injectActionProps(promptText, a1, a2) {
@@ -165,7 +172,7 @@ function injectActionProps(promptText, a1, a2) {
   // 2) 环境物：长椅/橱窗等动作依赖的场景物件，必须出现在定妆照（首帧）里，
   //    否则 H3 会在视频中凭空变出长椅——"长椅突兀出现"问题的根源。
   const env = ENV_PROPS.filter(a => a1 === a || a2 === a)
-    .map(a => SCENE_PROPS[a])
+    .map(a => SCENE_PROPS[a] + '.')
     .join(' ');
   if (env) {
     if (/props stay small and secondary if present/i.test(out)) {

@@ -209,6 +209,67 @@ test('restructured lookbook prompts: sections, prop arm replacement, teen protec
   assert.ok(!/supermodel/i.test(teenMale.krea_prompt), 'teen male leaks supermodel phrasing');
 });
 
+test('environment props (bench / display window) are injected into the still and referenced by the video segments', () => {
+  // 1/2. a1 与 a2 两种触发都注入对应环境物
+  const b1 = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'pose' });
+  assert.ok(b1.krea_prompt.includes('A simple wooden bench at sitting height stands naturally beside the model'));
+  const b2 = computeTaskPrompts({ scene: 'street', action1: 'pose', action2: 'bench_sit' });
+  assert.ok(b2.krea_prompt.includes('A simple wooden bench at sitting height stands naturally beside the model'));
+
+  const w1 = computeTaskPrompts({ scene: 'street', action1: 'window_browse', action2: 'pose' });
+  assert.ok(w1.krea_prompt.includes('A large glass display window with tastefully arranged items stands beside the model'));
+  const w2 = computeTaskPrompts({ scene: 'street', action1: 'pose', action2: 'window_browse' });
+  assert.ok(w2.krea_prompt.includes('A large glass display window'));
+
+  // 3/4. 与手持道具叠加：道具姿态替换 + 环境物同现，无腐蚀
+  for (const [a1, a2, propText] of [
+    ['bench_sit', 'coffee_sip', 'takeaway coffee cup'],
+    ['bench_sit', 'phone_check', 'smartphone'],
+    ['bench_sit', 'bag_shift', 'leather shoulder bag']
+  ]) {
+    const out = computeTaskPrompts({ scene: 'street', action1: a1, action2: a2 });
+    assert.ok(out.krea_prompt.includes('wooden bench'), `${a1}+${a2}: bench missing`);
+    assert.ok(out.krea_prompt.includes(propText), `${a1}+${a2}: prop missing`);
+    assert.ok(!out.krea_prompt.includes('arms resting naturally at sides'), `${a1}+${a2}: neutral arm sentence must be replaced`);
+    assert.ok(!/Both (one arm|both hands)/.test(out.krea_prompt), `${a1}+${a2}: Both-prefix corruption`);
+  }
+
+  // 5. 双环境物各恰好一次
+  const bw = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'window_browse' });
+  assert.equal((bw.krea_prompt.match(/wooden bench/g) || []).length, 1);
+  assert.equal((bw.krea_prompt.match(/glass display window/g) || []).length, 1);
+
+  // 6. 无环境物动作不注入
+  const wp = computeTaskPrompts({ scene: 'street', action1: 'walk', action2: 'pose' });
+  assert.ok(!wp.krea_prompt.includes('wooden bench'));
+  assert.ok(!wp.krea_prompt.includes('glass display window'));
+
+  // 7. 9 个生成点全部走 replace 路径（锁锚点：环境物句尾 + 锚点句同现）
+  for (const scene of ['street', 'studio', 'office', 'boutique', 'outdoor', 'cafe', 'custom']) {
+    const out = computeTaskPrompts({ scene, action1: 'bench_sit', action2: 'pose' });
+    assert.ok(out.krea_prompt.includes('fully visible. Props stay small and secondary if present'),
+      `${scene}: env sentence must end before the anchor (single period, replace path)`);
+  }
+  const mi = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'pose', model_image: 'm.png' });
+  assert.ok(mi.krea_prompt.includes('fully visible. Props stay small and secondary if present'));
+  const si = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'pose', scene_image: 's.png' });
+  assert.ok(si.krea_prompt.includes('fully visible. Props stay small and secondary if present'));
+
+  // 8. a1=a2 相同动作去重：环境物句恰好 1 次
+  const dup = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'bench_sit' });
+  assert.equal((dup.krea_prompt.match(/wooden bench/g) || []).length, 1);
+
+  // 9. 视频段确定性指涉首帧座位
+  const s1 = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'pose' });
+  assert.ok(s1.seg1_prompt.includes('座位在首帧画面中已经存在'));
+  const s2 = computeTaskPrompts({ scene: 'street', action1: 'pose', action2: 'bench_sit' });
+  assert.ok(s2.seg2_prompt.includes('座位在首帧画面中已经存在'));
+
+  // 10. 环境物仅由 seg2 触发时，seg1 补充要求段锚定场景物件不消失
+  const keep = computeTaskPrompts({ scene: 'street', action1: 'walk', action2: 'bench_sit' });
+  assert.ok(keep.seg1_prompt.includes('场景物件（长椅或玻璃橱窗）保持自然稳定'));
+});
+
 test('computeTaskPrompts injects props into Stage 1 and adapts kid posture', () => {
   const { resolveActions } = require('../../src/prompts/computeTaskPrompts');
   const coffeeOut = computeTaskPrompts({ scene: 'street', action1: 'coffee_sip', action2: 'walk' });
