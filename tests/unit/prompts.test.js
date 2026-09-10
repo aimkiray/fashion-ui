@@ -164,7 +164,9 @@ test('h3SegPrompt substitutes gender pronoun and appends extras', () => {
 
 test('h3SegPrompt adapts hand rules dynamically to avoid semantic collision with pocket/prop actions', () => {
   const pPocket = h3SegPrompt('street', 'pocket_stand', 1, false);
-  assert.ok(pPocket.includes('插兜单手顺应口袋自然收纳'));
+  // 条件式：服装可能没有口袋，插袋/扶腿侧由首帧实际服装决定
+  assert.ok(pPocket.includes('若服装有口袋：单手顺应口袋自然插袋'));
+  assert.ok(pPocket.includes('若无口袋：单手自然轻扶在大腿侧，不凭空捏出衣袋'));
   assert.ok(!pPocket.includes('不盲目插兜握拳'));
 
   const pCoffee = h3SegPrompt('cafe', 'coffee_sip', 1, false);
