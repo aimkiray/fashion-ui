@@ -72,6 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressBar = document.getElementById('progressBar');
   const progressStatusMsg = document.getElementById('progressStatusMsg');
   const elapsedTimer = document.getElementById('elapsedTimer');
+  const btnCancelTask = document.getElementById('btnCancelTask');
 
   // DOM Elements - Batch Navigation
   const batchNavBar = document.getElementById('batchNavBar');
@@ -136,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const cfgTestResult = document.getElementById('cfgTestResult');
   const btnTestApiConnection = document.getElementById('btnTestApiConnection');
   const btnSaveApiConfig = document.getElementById('btnSaveApiConfig');
+  const btnClearApiKey = document.getElementById('btnClearApiKey');
   const inspectorStage1Title = document.getElementById('inspectorStage1Title');
 
   const modelStylePromptInput = document.getElementById('modelStylePrompt');
@@ -319,6 +321,33 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       } finally {
         btnSaveApiConfig.disabled = false;
         btnSaveApiConfig.innerHTML = '<i class="ph ph-check"></i> 保存配置';
+      }
+    });
+  }
+
+  if (btnClearApiKey) {
+    btnClearApiKey.addEventListener('click', async () => {
+      if (!window.confirm('确定要清空服务端保存的 API Key 吗？\n（若 .env 中配置了环境变量，将自动安全回退至环境变量）')) return;
+      btnClearApiKey.disabled = true;
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ openaiApiKey: '' })
+        });
+        const data = await res.json();
+        if (data.success && data.config) {
+          serverConfig = data.config;
+          if (cfgApiKey) cfgApiKey.value = '';
+          updateApiConfigModalFields();
+          showToast('API Key 已清空（若有 .env 将自动回退）');
+        } else {
+          showToast('清空失败: ' + (data.error || '未知错误'), true);
+        }
+      } catch (err) {
+        showToast('清空失败: ' + err.message, true);
+      } finally {
+        btnClearApiKey.disabled = false;
       }
     });
   }
@@ -515,6 +544,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       const aspectRatio = document.querySelector('input[name="aspectRatio"]:checked')?.value || '3:4';
       const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'gpt_image_2';
       const genMode = document.querySelector('input[name="genMode"]:checked')?.value || 'video';
+      const enhanceMode = document.querySelector('input[name="enhanceMode"]:checked')?.value || 'off';
       // These used to be closure variables; after the refactor they live only in
       // the DOM. Referencing the old names here threw a ReferenceError that the
       // try/catch swallowed — silently breaking ALL option persistence.
@@ -522,6 +552,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       const seg2Action = seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2;
       const hairStyle = document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural';
       const faceShape = document.querySelector('input[name="faceShape"]:checked')?.value || 'oval';
+      const modelAge = document.querySelector('input[name="modelAge"]:checked')?.value || 'adult';
       const customScene = customSceneText ? customSceneText.value : '';
       const customPrompt = customPromptInput ? customPromptInput.value : '';
 
@@ -533,10 +564,12 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
         aspectRatio,
         stillEngine,
         genMode,
+        enhanceMode,
         seg1Action,
         seg2Action,
         hairStyle,
         faceShape,
+        modelAge,
         customPrompt,
         imageSource: uploadedFile ? 'upload' : (selectedImage ? 'preset' : null),
         selectedPresetImg: selectedImage || null,
@@ -640,6 +673,10 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       const el = document.querySelector(`input[name="genMode"][value="${opts.genMode}"]`);
       if (el) el.checked = true;
     }
+    if (opts.enhanceMode) {
+      const el = document.querySelector(`input[name="enhanceMode"][value="${opts.enhanceMode}"]`);
+      if (el) el.checked = true;
+    }
 
     // 5.5 Video action selects (options are populated by syncActionsFromServer before restore)
     if (seg1ActionSelect && opts.seg1Action) seg1ActionSelect.value = opts.seg1Action;
@@ -647,13 +684,18 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     if (seg1ActionSelect && seg1ActionSelect.selectedIndex === -1) seg1ActionSelect.value = DEFAULT_ACTIONS.seg1;
     if (seg2ActionSelect && seg2ActionSelect.selectedIndex === -1) seg2ActionSelect.value = DEFAULT_ACTIONS.seg2;
 
-    // 5.6 Hair & face shape radios
+    // 5.6 Hair, face shape & model age radios
     if (opts.hairStyle) {
       const el = document.querySelector('input[name="hairStyle"][value="' + opts.hairStyle + '"]');
       if (el) el.checked = true;
     }
     if (opts.faceShape) {
       const el = document.querySelector('input[name="faceShape"][value="' + opts.faceShape + '"]');
+      if (el) el.checked = true;
+    }
+    if (opts.modelAge) {
+      const ageVal = opts.modelAge === 'prime' ? 'adult' : (opts.modelAge === 'mature' ? 'middle_aged' : (opts.modelAge === 'silver' ? 'elderly' : opts.modelAge));
+      const el = document.querySelector('input[name="modelAge"][value="' + ageVal + '"]');
       if (el) el.checked = true;
     }
 
@@ -777,6 +819,10 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
         btnGenerate.innerHTML = '<i class="ph ph-sparkle"></i> 生成单套场景视频';
       }
     }
+    // 超清增强仅对视频生成生效：定妆照模式下禁用开关，避免"勾了但被静默忽略"
+    const enhanceGroup = document.getElementById('enhanceModeGroup');
+    if (enhanceGroup) enhanceGroup.classList.toggle('option-disabled', isStillOnly);
+    document.querySelectorAll('input[name="enhanceMode"]').forEach(el => { el.disabled = isStillOnly; });
   }
 
   function updateStillEngineUI() {
@@ -796,12 +842,21 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     }
   }
 
-  // 2. Load Scenes
+  // 2. Load Actions & Scenes
+  const cachedActionsMap = { random: '随机' };
+  function getActionDisplayName(id) {
+    if (!id || id === 'random') return '随机';
+    return cachedActionsMap[id] || id;
+  }
+
   async function syncActionsFromServer() {
     if (!seg1ActionSelect || !seg2ActionSelect) return;
     try {
       const res = await fetch('/api/actions');
       const actions = await res.json();
+      if (Array.isArray(actions)) {
+        actions.forEach(a => { cachedActionsMap[a.id] = a.name; });
+      }
       const prev = { seg1: seg1ActionSelect.value, seg2: seg2ActionSelect.value };
       for (const sel of [seg1ActionSelect, seg2ActionSelect]) {
         sel.innerHTML = '<option value="random">🎲 随机</option>' +
@@ -1282,6 +1337,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
           action2: seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2,
           hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
           face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
+          model_age: document.querySelector('input[name="modelAge"]:checked')?.value || 'adult',
           custom_prompt: customPrompt,
           model_image: hasModelImg ? 'placeholder_model.png' : null,
           scene_image: hasSceneImg ? 'placeholder_scene.png' : null
@@ -1577,6 +1633,8 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
           action2: seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2,
           hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
           face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
+          model_age: document.querySelector('input[name="modelAge"]:checked')?.value || 'adult',
+          enhance: genMode !== 'still_only' && document.querySelector('input[name="enhanceMode"]:checked')?.value === 'on',
         })
       });
       let genData;
@@ -1592,7 +1650,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       // have relabeled it to 载入现有定妆照).
       if (typeof updateStillEngineUI === 'function') updateStillEngineUI();
       try {
-        sessionStorage.setItem(ACTIVE_TASK_KEY, JSON.stringify({
+        localStorage.setItem(ACTIVE_TASK_KEY, JSON.stringify({
           taskId: currentTaskId,
           startTime: startTime || Date.now()
         }));
@@ -1610,7 +1668,8 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
   // canvas is derived server-side from the still's real aspect ratio.
   async function generateVideoFromExistingStill(filename) {
     if (!filename) return;
-    if (!window.confirm(`使用定妆照「${filename}」直接生成 10 秒展示视频?\n将跳过阶段一，场景与动作按当前面板设置执行。`)) return;
+    const enhanceOn = document.querySelector('input[name="enhanceMode"]:checked')?.value === 'on';
+    if (!window.confirm(`使用定妆照「${filename}」直接生成 10 秒展示视频?\n将跳过阶段一，场景与动作按当前面板设置执行。\n超清增强: ${enhanceOn ? '开启（1080p·高帧率，耗时增加）' : '关闭（快速预览）'}`)) return;
     try {
       setButtonsDisabled(true);
       stopActiveVideoPlayback();
@@ -1664,7 +1723,9 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
           action1: seg1ActionSelect ? seg1ActionSelect.value : DEFAULT_ACTIONS.seg1,
           action2: seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2,
           hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
-          face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval'
+          face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
+          model_age: document.querySelector('input[name="modelAge"]:checked')?.value || 'adult',
+          enhance: document.querySelector('input[name="enhanceMode"]:checked')?.value === 'on'
         })
       });
       let genData;
@@ -1681,7 +1742,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       const step2TextEl = document.getElementById('step2Text');
       if (step2TextEl) step2TextEl.textContent = '载入现有定妆照';
       try {
-        sessionStorage.setItem(ACTIVE_TASK_KEY, JSON.stringify({
+        localStorage.setItem(ACTIVE_TASK_KEY, JSON.stringify({
           taskId: currentTaskId,
           startTime: startTime || Date.now()
         }));
@@ -1731,10 +1792,6 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
         const batchSceneNames = batchScenes.map(id => BATCH_SCENE_LABELS[id] || id).join('、');
 
         const genMode = document.querySelector('input[name="genMode"]:checked')?.value || 'video';
-        const seg1Action = seg1ActionSelect ? seg1ActionSelect.value : DEFAULT_ACTIONS.seg1;
-        const seg2Action = seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2;
-        const hairStyle = document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural';
-        const faceShape = document.querySelector('input[name="faceShape"]:checked')?.value || 'oval';
         const isStillOnly = genMode === 'still_only';
 
         // Reset showcase view for batch execution
@@ -1811,6 +1868,8 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
             action2: seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2,
             hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
             face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
+            model_age: document.querySelector('input[name="modelAge"]:checked')?.value || 'adult',
+            enhance: genMode !== 'still_only' && document.querySelector('input[name="enhanceMode"]:checked')?.value === 'on',
           })
         });
         let batchResp;
@@ -1823,7 +1882,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
 
         activeBatchId = batchResp.batchId;
         try {
-          sessionStorage.setItem(ACTIVE_BATCH_KEY, JSON.stringify({
+          localStorage.setItem(ACTIVE_BATCH_KEY, JSON.stringify({
             batchId: activeBatchId,
             startTime: startTime || Date.now()
           }));
@@ -1916,6 +1975,52 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     }
   }
 
+  function updateBatchTabsState(batch) {
+    if (!batch) return 0;
+    const totalTasks = batch.totalTasks || 3;
+    const subTasks = batch.tasks || [];
+    let completedCount = 0;
+    subTasks.forEach((t, i) => {
+      const tabBtn = batchTabs && batchTabs.children ? batchTabs.children[i] : null;
+      if (tabBtn && t.action1 && t.action2) {
+        const a1Name = getActionDisplayName(t.action1);
+        const a2Name = getActionDisplayName(t.action2);
+        tabBtn.title = `场景${i + 1}（动作：${a1Name} → ${a2Name}）`;
+        if (!tabBtn.querySelector('.tab-action-pill')) {
+          const pill = document.createElement('span');
+          pill.className = 'tab-action-pill';
+          pill.textContent = `${a1Name} → ${a2Name}`;
+          tabBtn.appendChild(pill);
+        }
+      }
+      if (t.status === 'completed') {
+        completedCount++;
+        if (tabBtn) {
+          tabBtn.className = `batch-tab-btn ${i === selectedBatchIndex ? 'active' : ''} done`;
+          const icon = tabBtn.querySelector('.tab-status-icon');
+          if (icon) icon.className = 'ph ph-check-circle tab-status-icon';
+        }
+      } else if (t.status === 'running') {
+        if (tabBtn) {
+          tabBtn.className = `batch-tab-btn ${i === selectedBatchIndex ? 'active' : ''} running`;
+          const icon = tabBtn.querySelector('.tab-status-icon');
+          if (icon) icon.className = 'ph ph-spinner tab-status-icon';
+        }
+      } else if (t.status === 'error') {
+        if (tabBtn) {
+          tabBtn.className = `batch-tab-btn ${i === selectedBatchIndex ? 'active' : ''} error`;
+          const icon = tabBtn.querySelector('.tab-status-icon');
+          if (icon) icon.className = 'ph ph-x-circle tab-status-icon';
+        }
+      }
+    });
+
+    if (batchProgressPill) {
+      batchProgressPill.textContent = `已完成 ${completedCount}/${totalTasks}`;
+    }
+    return completedCount;
+  }
+
   function startBatchPolling(batchId) {
     if (batchPollTimeout) clearTimeout(batchPollTimeout);
     isBatchPolling = true;
@@ -1926,10 +2031,11 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       try {
         const res = await fetch(`/api/batch/${batchId}`);
         if (res.status === 404) {
-          stopBatchPolling('批量任务记录已失效，请重新发起。');
+          stopBatchPolling('批量任务记录已失效，请重新发起。', true);
           return;
         }
         if (res.ok) {
+          if (!isBatchPolling) return;
           pollFailures = 0;
           const batch = await res.json();
           currentBatchData = batch;
@@ -1937,34 +2043,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
           const currentIdx = batch.currentTaskIndex;
           const subTasks = batch.tasks || [];
 
-          let completedCount = 0;
-          subTasks.forEach((t, i) => {
-            const tabBtn = batchTabs && batchTabs.children ? batchTabs.children[i] : null;
-            if (t.status === 'completed') {
-              completedCount++;
-              if (tabBtn) {
-                tabBtn.className = `batch-tab-btn ${i === selectedBatchIndex ? 'active' : ''} done`;
-                const icon = tabBtn.querySelector('.tab-status-icon');
-                if (icon) icon.className = 'ph ph-check-circle tab-status-icon';
-              }
-            } else if (t.status === 'running') {
-              if (tabBtn) {
-                tabBtn.className = `batch-tab-btn ${i === selectedBatchIndex ? 'active' : ''} running`;
-                const icon = tabBtn.querySelector('.tab-status-icon');
-                if (icon) icon.className = 'ph ph-spinner tab-status-icon';
-              }
-            } else if (t.status === 'error') {
-              if (tabBtn) {
-                tabBtn.className = `batch-tab-btn ${i === selectedBatchIndex ? 'active' : ''} error`;
-                const icon = tabBtn.querySelector('.tab-status-icon');
-                if (icon) icon.className = 'ph ph-x-circle tab-status-icon';
-              }
-            }
-          });
-
-          if (batchProgressPill) {
-            batchProgressPill.textContent = `已完成 ${completedCount}/${totalTasks}`;
-          }
+          const completedCount = updateBatchTabsState(batch);
 
           const runningTask = subTasks[currentIdx] || subTasks[subTasks.length - 1];
           const taskProgress = (runningTask && runningTask.progress) || 0;
@@ -1973,7 +2052,10 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
 
           const sceneName = (runningTask && runningTask.scene && runningTask.scene.name) || `场景 ${currentIdx + 1}`;
           const currentMsg = (runningTask && runningTask.message) || '处理中...';
-          progressStatusMsg.textContent = `[${Math.min(totalTasks, currentIdx + 1)}/${totalTasks} ${sceneName}] ${currentMsg}`;
+          const act1 = runningTask && runningTask.action1 ? getActionDisplayName(runningTask.action1) : '';
+          const act2 = runningTask && runningTask.action2 ? getActionDisplayName(runningTask.action2) : '';
+          const actHint = (act1 && act2) ? ` · ${act1} → ${act2}` : '';
+          progressStatusMsg.textContent = `[${Math.min(totalTasks, currentIdx + 1)}/${totalTasks} ${sceneName}${actHint}] ${currentMsg}`;
 
           if (runningTask) {
             updateStepsUI(runningTask.progress, runningTask.mode);
@@ -2000,11 +2082,22 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
             }
           }
 
+          if (batch.status === 'cancelled') {
+            isBatchPolling = false;
+            stopTimer();
+            setButtonsDisabled(false);
+            try { localStorage.removeItem(ACTIVE_BATCH_KEY); } catch (e) {}
+            showToast('批量任务已取消');
+            progressStatusMsg.textContent = '批量任务已取消';
+            loadHistory();
+            return;
+          }
+
           if (batch.status === 'completed' || batch.status === 'error' || completedCount >= totalTasks) {
             isBatchPolling = false;
             stopTimer();
             setButtonsDisabled(false);
-            try { sessionStorage.removeItem(ACTIVE_BATCH_KEY); } catch (e) {}
+            try { localStorage.removeItem(ACTIVE_BATCH_KEY); } catch (e) {}
             if (completedCount === totalTasks) {
               showToast('⚡ 批量 3 套场景展示成片已全部生成就绪！');
             } else if (completedCount > 0) {
@@ -2024,7 +2117,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       }
 
       if (pollFailures >= 5) {
-        stopBatchPolling('与服务器通信连续失败，已停止批量任务追踪。');
+        stopBatchPolling('与服务器通信连续失败，已停止批量任务追踪。', true);
         return;
       }
 
@@ -2036,14 +2129,57 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     poll();
   }
 
-  function stopBatchPolling(msg) {
+  function stopBatchPolling(msg, isError = false) {
     isBatchPolling = false;
     if (batchPollTimeout) clearTimeout(batchPollTimeout);
     stopTimer();
     setButtonsDisabled(false);
-    try { sessionStorage.removeItem(ACTIVE_BATCH_KEY); } catch (e) {}
-    showToast(msg, true);
+    try { localStorage.removeItem(ACTIVE_BATCH_KEY); } catch (e) {}
+    showToast(msg, isError);
     loadHistory();
+  }
+
+  // Cancel task button handler
+  if (btnCancelTask) {
+    btnCancelTask.addEventListener('click', async () => {
+      if (!isPollingActive && !isBatchPolling) {
+        showToast('当前没有进行中的生成任务');
+        return;
+      }
+      if (!window.confirm('确定要中断并取消当前的生成任务吗？')) return;
+
+      btnCancelTask.disabled = true;
+      try {
+        if (isBatchPolling && activeBatchId) {
+          const res = await fetch(`/api/batch/${activeBatchId}/cancel`, { method: 'POST' });
+          const data = await res.json();
+          if (res.ok) {
+            stopBatchPolling('批量任务已成功取消');
+          } else {
+            showToast(data.error || '取消批量任务失败', true);
+          }
+        } else if (currentTaskId) {
+          const res = await fetch(`/api/tasks/${currentTaskId}/cancel`, { method: 'POST' });
+          const data = await res.json();
+          if (res.ok) {
+            if (pollTimeout) clearTimeout(pollTimeout);
+            isPollingActive = false;
+            stopTimer();
+            setButtonsDisabled(false);
+            try { localStorage.removeItem(ACTIVE_TASK_KEY); } catch (e) {}
+            progressStatusMsg.textContent = '任务已取消';
+            showToast('任务已成功取消');
+            loadHistory();
+          } else {
+            showToast(data.error || '取消任务失败', true);
+          }
+        }
+      } catch (err) {
+        showToast('取消请求异常: ' + err.message, true);
+      } finally {
+        btnCancelTask.disabled = false;
+      }
+    });
   }
 
   // Batch download all button
@@ -2150,7 +2286,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       if (pollTimeout) clearTimeout(pollTimeout);
       stopTimer();
       setButtonsDisabled(false);
-      try { sessionStorage.removeItem(ACTIVE_TASK_KEY); } catch (e) {}
+      try { localStorage.removeItem(ACTIVE_TASK_KEY); } catch (e) {}
       showToast(message, true);
       // Task record is gone, but finished artifacts may already be in storage
       loadHistory();
@@ -2166,10 +2302,14 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
           return;
         }
         if (res.ok) {
+          if (!isPollingActive) return;
           pollFailures = 0;
           const task = await res.json();
           progressBar.style.width = `${task.progress}%`;
-          progressStatusMsg.textContent = task.message;
+          const act1 = task.action1 ? getActionDisplayName(task.action1) : '';
+          const act2 = task.action2 ? getActionDisplayName(task.action2) : '';
+          const actHint = (act1 && act2 && task.mode === 'video') ? ` (${act1} → ${act2})` : '';
+          progressStatusMsg.textContent = `${task.message}${actHint}`;
           updateStepsUI(task.progress, task.mode);
 
           // Progressive reveal: show Stage 1 still photo as soon as it is rendered
@@ -2186,16 +2326,25 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
             isPollingActive = false;
             stopTimer();
             setButtonsDisabled(false);
-            try { sessionStorage.removeItem(ACTIVE_TASK_KEY); } catch (e) {}
+            try { localStorage.removeItem(ACTIVE_TASK_KEY); } catch (e) {}
             showToast('生成完成，成片已就绪。');
             showResults(task);
+            loadHistory();
+            return;
+          } else if (task.status === 'cancelled') {
+            isPollingActive = false;
+            stopTimer();
+            setButtonsDisabled(false);
+            try { localStorage.removeItem(ACTIVE_TASK_KEY); } catch (e) {}
+            showToast('任务已取消');
+            progressStatusMsg.textContent = '任务已取消';
             loadHistory();
             return;
           } else if (task.status === 'error') {
             isPollingActive = false;
             stopTimer();
             setButtonsDisabled(false);
-            try { sessionStorage.removeItem(ACTIVE_TASK_KEY); } catch (e) {}
+            try { localStorage.removeItem(ACTIVE_TASK_KEY); } catch (e) {}
             showToast('生成失败: ' + (task.error || task.message), true);
             return;
           }
@@ -2321,6 +2470,94 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
   }
   window.addEventListener('resize', scheduleHistoryMasonry);
 
+  // ── 历史卡片「超清增强」: 对已生成的 720p·24fps 视频后制升级 (FFmpeg 60fps 插帧 + Lanczos 1.5x) ──
+  const ENHANCED_RE = /_1080p60\.mp4$/i;
+  const ENHANCE_POLL_INTERVAL = 1500;
+  const ENHANCE_POLL_DEADLINE = 30 * 60 * 1000; // 服务端挂死/重启后不再无限轮询
+  const ENHANCE_MAX_NETWORK_ERRORS = 5;         // 瞬时网络抖动有限重试，避免误放行第二个 job
+
+  async function runCardEnhance(filename, btn) {
+    // busy 态再次点击 = 请求取消（1~5 分钟的任务需要中止入口）
+    if (btn.dataset.busy === '1') {
+      const jobId = btn.dataset.jobId;
+      if (!jobId || btn.dataset.cancelAsked === '1') return;
+      if (!window.confirm('正在增强中，要取消这个超清增强任务吗？')) return;
+      btn.dataset.cancelAsked = '1';
+      try {
+        await fetch(`/api/enhance/${jobId}/cancel`, { method: 'POST' });
+      } catch (e) {
+        showToast(e.message || '取消请求失败', true);
+        btn.dataset.cancelAsked = '';
+      }
+      return;
+    }
+    if (!window.confirm(`对「${filename}」执行超清增强?\n将生成 1080p·60fps 交付版本（原图保留），处理约需 1~5 分钟。`)) return;
+    btn.dataset.busy = '1';
+    const originalHtml = btn.innerHTML;
+    try {
+      const res = await fetch('/api/enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename })
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || '启动增强失败');
+      btn.dataset.jobId = body.jobId;
+      showToast(body.resumed ? '该视频已在增强中，已接续进度显示' : '超清增强任务已启动');
+
+      let networkErrors = 0;
+      const startedAt = Date.now();
+      const poll = async () => {
+        if (Date.now() - startedAt > ENHANCE_POLL_DEADLINE) {
+          if (btn.isConnected) { btn.innerHTML = originalHtml; btn.dataset.busy = ''; btn.dataset.jobId = ''; }
+          showToast('增强任务超时未完成，请稍后在历史中查看或重新发起', true);
+          return;
+        }
+        try {
+          const jRes = await fetch(`/api/enhance/${body.jobId}`);
+          const job = await jRes.json();
+          if (!jRes.ok) {
+            // 404 = 服务端 job 丢失（内存 Map，服务重启即失），重试无意义
+            throw new Error(jRes.status === 404
+              ? '增强任务已丢失（服务可能重启过），请重新发起'
+              : (job.error || '查询增强进度失败'));
+          }
+          networkErrors = 0;
+          if (btn.isConnected) {
+            btn.innerHTML = `<i class="ph ph-circle-notch spin"></i> ${job.progress || 0}%`;
+          }
+          if (job.status === 'completed') {
+            showToast(`超清增强完成: ${job.output}`);
+            // 仅当按钮仍挂在当前 DOM 上（未因刷新/重建失效）才刷新列表，
+            // 避免旧 poller 与新 poller 重复触发 loadHistory 与提示
+            if (btn.isConnected) loadHistory();
+            return;
+          }
+          if (job.status === 'error') throw new Error(job.message || '增强失败');
+          if (job.status === 'cancelled') {
+            if (btn.isConnected) { btn.innerHTML = originalHtml; btn.dataset.busy = ''; btn.dataset.cancelAsked = ''; btn.dataset.jobId = ''; }
+            showToast('超清增强已取消');
+            return;
+          }
+          setTimeout(poll, ENHANCE_POLL_INTERVAL);
+        } catch (e) {
+          networkErrors++;
+          // 网络抖动：有限重试，服务端 ffmpeg 仍在跑，直接放弃会让用户重复发起
+          if (networkErrors < ENHANCE_MAX_NETWORK_ERRORS && !/丢失|重新发起/.test(e.message || '')) {
+            setTimeout(poll, ENHANCE_POLL_INTERVAL * 2);
+            return;
+          }
+          if (btn.isConnected) { btn.innerHTML = originalHtml; btn.dataset.busy = ''; btn.dataset.cancelAsked = ''; btn.dataset.jobId = ''; }
+          showToast(e.message || '增强失败', true);
+        }
+      };
+      poll();
+    } catch (e) {
+      btn.dataset.busy = '';
+      showToast(e.message || '增强失败', true);
+    }
+  }
+
   async function loadHistory() {
     try {
       const res = await fetch('/api/history');
@@ -2337,25 +2574,38 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
 
       items.forEach(item => {
         const isVideo = item.type === 'video';
+        const isEnhanced = isVideo && ENHANCED_RE.test(item.filename);
         const card = document.createElement('div');
         card.className = 'history-card';
         // With known dimensions, reserve the thumb box via aspect-ratio before
         // the image loads — the masonry spans are correct on the first pass.
-        const thumbDims = (item.width > 0 && item.height > 0)
-          ? ` style="aspect-ratio: ${item.width} / ${item.height};"`
+        const thumbDims = (Number.isFinite(parseInt(item.width, 10)) && Number.isFinite(parseInt(item.height, 10)) && item.width > 0 && item.height > 0)
+          ? ` style="aspect-ratio: ${parseInt(item.width, 10)} / ${parseInt(item.height, 10)};"`
           : '';
         card.innerHTML = `
-          ${item.previewUrl ? `<img class="history-thumb" src="${escapeHtml(item.previewUrl)}" alt="${escapeHtml(item.filename)}"${thumbDims} loading="lazy" decoding="async">` : `<div class="history-thumb history-thumb-empty"><i class="ph ph-film-strip"></i></div>`}
+          ${item.previewUrl ? `<img class="history-thumb" src="${escapeHtml(item.previewUrl)}" alt="${escapeHtml(item.filename)}"${thumbDims} loading="lazy" decoding="async">` : `<div class="history-thumb history-thumb-empty"><i class="ph ${isVideo ? 'ph-film-strip' : 'ph-image'}"></i></div>`}
           <button class="history-delete" type="button" title="删除此记录"><i class="ph ph-trash"></i></button>
+          ${isEnhanced ? '<div class="history-hd-badge" title="1080p · 60fps 超清增强版"><i class="ph ph-gem"></i> 1080p60</div>' : ''}
           <div class="history-meta">
             <div class="history-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
             <div class="history-size">
-              <span class="history-badge ${isVideo ? 'badge-video' : 'badge-image'}">${isVideo ? '10s 视频' : '定妆照'}</span>
+              <span class="history-badge ${isVideo ? 'badge-video' : 'badge-image'}">${isEnhanced ? '1080p·60fps 超清' : (isVideo ? '10s 视频' : '定妆照')}</span>
               <span>${escapeHtml(item.size)}</span>
             </div>
             ${!isVideo ? `<button class="history-video-btn" type="button" title="用此定妆照直接生成 10 秒视频"><i class="ph ph-video-camera"></i> 生成视频</button>` : ''}
+            ${isVideo && !isEnhanced ? `<button class="history-enhance-btn" type="button" title="后制增强为 1080p·60fps 交付版（FFmpeg 插帧 + Lanczos 放大）"><i class="ph ph-gem"></i> 超清增强</button>` : ''}
           </div>
         `;
+        const thumbImg = card.querySelector('img.history-thumb');
+        if (thumbImg) {
+          thumbImg.addEventListener('error', () => {
+            const emptyDiv = document.createElement('div');
+            emptyDiv.className = 'history-thumb history-thumb-empty';
+            emptyDiv.innerHTML = `<i class="ph ${isVideo ? 'ph-film-strip' : 'ph-image'}"></i>`;
+            thumbImg.replaceWith(emptyDiv);
+            scheduleHistoryMasonry();
+          }, { once: true });
+        }
         card.querySelector('.history-delete').addEventListener('click', async (ev) => {
           ev.stopPropagation();
           const cardEl = ev.currentTarget.closest('.history-card');
@@ -2380,6 +2630,11 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
         if (videoBtn) videoBtn.addEventListener('click', (ev) => {
           ev.stopPropagation();
           generateVideoFromExistingStill(item.filename);
+        });
+        const enhanceBtn = card.querySelector('.history-enhance-btn');
+        if (enhanceBtn) enhanceBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          runCardEnhance(item.filename, enhanceBtn);
         });
         card.addEventListener('click', () => {
           showcaseEmpty.style.display = 'none';
@@ -2435,28 +2690,30 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     }
   }
 
-  // Resume in-flight task tracking if page was refreshed during generation
+  // Resume in-flight task tracking or restore results if page was closed/refreshed during generation
   async function checkActiveTaskOnLoad() {
     // 1. Check Batch Task
     try {
-      const rawBatch = sessionStorage.getItem(ACTIVE_BATCH_KEY);
+      const rawBatch = localStorage.getItem(ACTIVE_BATCH_KEY) || sessionStorage.getItem(ACTIVE_BATCH_KEY);
       if (rawBatch) {
         const { batchId, startTime: savedStartTime } = JSON.parse(rawBatch);
         if (batchId) {
           const bRes = await fetch(`/api/batch/${batchId}`);
           if (bRes.ok) {
             const batch = await bRes.json();
+            const scenes = batch.tasks && batch.tasks.length > 0
+              ? batch.tasks.map(t => (t.scene && t.scene.id) || 'street')
+              : ['street', 'studio', 'boutique'];
+            const taskIds = batch.tasks ? batch.tasks.map(t => t.id) : [];
+
             if (batch.status === 'queued' || batch.status === 'running') {
               activeBatchId = batchId;
               setButtonsDisabled(true);
               stopActiveVideoPlayback();
               progressCard.style.display = 'block';
               if (progressCardTitle) progressCardTitle.textContent = '⚡ 批量 3 套场景生成进度';
-              const scenes = batch.tasks && batch.tasks.length > 0
-                ? batch.tasks.map(t => (t.scene && t.scene.id) || 'street')
-                : ['street', 'studio', 'boutique'];
-              const taskIds = batch.tasks ? batch.tasks.map(t => t.id) : [];
               initBatchUI(scenes, taskIds);
+              updateBatchTabsState(batch);
 
               startTime = savedStartTime || Date.now();
               elapsedTimer.textContent = '00:00';
@@ -2470,9 +2727,20 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
 
               startBatchPolling(batchId);
               return;
+            } else if (batch.status === 'completed') {
+              try { localStorage.removeItem(ACTIVE_BATCH_KEY); sessionStorage.removeItem(ACTIVE_BATCH_KEY); } catch (e) {}
+              currentBatchData = batch;
+              selectedBatchIndex = 0;
+              initBatchUI(scenes, taskIds);
+              updateBatchTabsState(batch);
+              if (batch.tasks && batch.tasks.length > 0) {
+                showBatchTaskResult(batch.tasks[0]);
+              }
+              showToast('⚡ 批量 3 套场景展示成片已全部生成就绪！');
+              return;
             }
           }
-          sessionStorage.removeItem(ACTIVE_BATCH_KEY);
+          try { localStorage.removeItem(ACTIVE_BATCH_KEY); sessionStorage.removeItem(ACTIVE_BATCH_KEY); } catch (e) {}
         }
       }
     } catch (e) {
@@ -2481,14 +2749,14 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
 
     // 2. Check Single Task
     try {
-      const raw = sessionStorage.getItem(ACTIVE_TASK_KEY);
+      const raw = localStorage.getItem(ACTIVE_TASK_KEY) || sessionStorage.getItem(ACTIVE_TASK_KEY);
       if (!raw) return;
       const { taskId, startTime: savedStartTime } = JSON.parse(raw);
       if (!taskId) return;
 
       const res = await fetch(`/api/progress/${taskId}`);
       if (res.status === 404) {
-        sessionStorage.removeItem(ACTIVE_TASK_KEY);
+        try { localStorage.removeItem(ACTIVE_TASK_KEY); sessionStorage.removeItem(ACTIVE_TASK_KEY); } catch (e) {}
         return;
       }
       const task = await res.json();
@@ -2523,9 +2791,10 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
 
         startPolling(taskId);
       } else {
-        sessionStorage.removeItem(ACTIVE_TASK_KEY);
+        try { localStorage.removeItem(ACTIVE_TASK_KEY); sessionStorage.removeItem(ACTIVE_TASK_KEY); } catch (e) {}
         if (task.status === 'completed') {
           showResults(task);
+          showToast('生成完成，成片已就绪。');
         }
       }
     } catch (e) {
@@ -2545,6 +2814,8 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     await syncModelStylesFromServer();
     updateModelStylePromptUI();
     updateStillEngineUI();
+    // 同步恢复后的派生 UI：genMode→超清增强禁用态、批量按钮文案等
+    updateBatchHint();
     await loadScenes();
     await checkActiveTaskOnLoad();
     loadHistory();

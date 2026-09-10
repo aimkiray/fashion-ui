@@ -57,10 +57,10 @@
         <div class="preset-section">
           <span class="preset-label">或者使用预置样例快捷体验：</span>
           <div class="preset-pills">
-            <button class="preset-btn" data-img="test_outfit.png">复古皮夹克</button>
-            <button class="preset-btn" data-img="outfit-streetwear.png">宽松解构牛仔</button>
-            <button class="preset-btn" data-img="green_dress.png">法式雪纺针织裙</button>
-            <button class="preset-btn" data-img="safari_outfit.png">经典工装平铺</button>
+            <button class="preset-btn" data-img="test_outfit.png">学院风衬衫百褶裙</button>
+            <button class="preset-btn" data-img="outfit-streetwear.png">猫耳斗篷奇幻装</button>
+            <button class="preset-btn" data-img="green_dress.png">地雷系蕾丝格纹裙</button>
+            <button class="preset-btn" data-img="safari_outfit.png">暗黑朋克格纹裙</button>
           </div>
         </div>
 
@@ -223,7 +223,7 @@
 
           <div class="option-group">
             <label>发型</label>
-            <div class="radio-pills pills-grid-5">
+            <div class="radio-pills pills-grid-4">
               <label class="pill-label">
                 <input type="radio" name="hairStyle" value="natural" checked>
                 <span>长发披肩</span>
@@ -264,6 +264,46 @@
                 <input type="radio" name="hairStyle" value="twin">
                 <span>双马尾</span>
               </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="french_curls">
+                <span>法式羊毛卷</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="messy_bun">
+                <span>慵懒丸子头</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="lob">
+                <span>锁骨微卷发</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="side_braid">
+                <span>侧边麻花辫</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="airy_bangs">
+                <span>空气刘海碎发</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="low_ponytail">
+                <span>气质低马尾</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="wolf_cut">
+                <span>层次狼尾发</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="vintage_waves">
+                <span>复古水波纹</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="side_part_volume">
+                <span>高颅顶大偏分</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="hairStyle" value="box_braids">
+                <span>潮流细编发</span>
+              </label>
             </div>
           </div>
 
@@ -298,6 +338,44 @@
           </div>
 
           <div class="option-group">
+            <label>模特年龄</label>
+            <div class="radio-pills pills-grid-4">
+              <label class="pill-label">
+                <input type="radio" name="modelAge" value="toddler">
+                <span>幼儿 (3岁)</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelAge" value="child">
+                <span>儿童 (7岁)</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelAge" value="teen">
+                <span>少年 (14岁)</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelAge" value="youth">
+                <span>青年 (20岁)</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelAge" value="adult" checked>
+                <span>成年 (28岁)</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelAge" value="middle_aged">
+                <span>中年 (40岁)</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelAge" value="senior">
+                <span>中老年 (55岁)</span>
+              </label>
+              <label class="pill-label">
+                <input type="radio" name="modelAge" value="elderly">
+                <span>老年 (65岁)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="option-group">
             <label>画幅比例</label>
             <div class="radio-pills">
               <label class="pill-label">
@@ -318,9 +396,43 @@
           <div class="option-group">
             <label>视频动作（分镜一 → 分镜二）</label>
             <div class="action-selects">
-              <select id="seg1Action" class="action-select" title="分镜一动作"></select>
+              <select id="seg1Action" class="action-select" title="分镜一动作">
+                <option value="random">🎲 随机</option>
+                <option value="walk">迎面走姿</option>
+                <option value="turn45">45°转体展示</option>
+                <option value="pose">定点造型展示</option>
+                <option value="turnshow">原地转身展示</option>
+                <option value="sidestep">侧向漫步</option>
+                <option value="coffee_sip">轻捧咖啡</option>
+                <option value="pocket_stand">单手插兜</option>
+                <option value="hair_tuck">拂发撩发</option>
+                <option value="shoulder_glance">侧身回眸</option>
+                <option value="phone_check">低头看手机</option>
+                <option value="bench_sit">长椅小憩</option>
+                <option value="jacket_adjust">整理衣领</option>
+                <option value="window_browse">橱窗驻足</option>
+                <option value="bag_shift">轻理随身包</option>
+                <option value="look_around">驻足环视</option>
+              </select>
               <span class="action-arrow">→</span>
-              <select id="seg2Action" class="action-select" title="分镜二动作"></select>
+              <select id="seg2Action" class="action-select" title="分镜二动作">
+                <option value="random">🎲 随机</option>
+                <option value="walk">迎面走姿</option>
+                <option value="turn45">45°转体展示</option>
+                <option value="pose">定点造型展示</option>
+                <option value="turnshow">原地转身展示</option>
+                <option value="sidestep">侧向漫步</option>
+                <option value="coffee_sip">轻捧咖啡</option>
+                <option value="pocket_stand">单手插兜</option>
+                <option value="hair_tuck">拂发撩发</option>
+                <option value="shoulder_glance">侧身回眸</option>
+                <option value="phone_check">低头看手机</option>
+                <option value="bench_sit">长椅小憩</option>
+                <option value="jacket_adjust">整理衣领</option>
+                <option value="window_browse">橱窗驻足</option>
+                <option value="bag_shift">轻理随身包</option>
+                <option value="look_around">驻足环视</option>
+              </select>
             </div>
             <p class="action-hint">两个分镜可自由组合；选择「随机」每次生成自动抽取不同动作，避免千篇一律</p>
           </div>
@@ -358,17 +470,32 @@
             </div>
           </div>
 
+          <div class="option-group" id="enhanceModeGroup">
+            <label>超清增强</label>
+            <div class="radio-pills">
+              <label class="pill-label" title="快速预览：720p · 24fps，生成速度最优">
+                <input type="radio" name="enhanceMode" value="off" checked>
+                <span><i class="ph ph-eye"></i> 快速预览 (720p·24fps)</span>
+              </label>
+              <label class="pill-label" title="3D Latent Upscale 放大至 1080p 级 + RIFE 高帧率插帧（远端安装插帧模型后自动启用），生成耗时增加约 1~2 分钟">
+                <input type="radio" name="enhanceMode" value="on">
+                <span><i class="ph ph-gem"></i> 超清增强 (1080p·高帧率)</span>
+              </label>
+            </div>
+            <p class="action-hint">开启后走 3D Latent 空间放大（画质无损级 1080p）并尝试 RIFE 插帧；未安装插帧模型时自动回退 1080p·24fps。仅对 10 秒视频生成生效（定妆照模式不适用）。也可在生成历史卡片上对已完成的视频单独增强。</p>
+          </div>
+
           <!-- Custom Prompt Input (Collapsible, Default Folded) -->
           <div class="option-group custom-prompt-group">
             <details class="custom-prompt-details" id="customPromptDetails">
               <summary class="custom-prompt-summary">
                 <div class="summary-left">
                   <i class="ph ph-sliders"></i>
-                  <span class="summary-title">个性化要求（自由输入）</span>
+                  <span class="summary-title">个性化要求</span>
                   <span class="custom-prompt-badge" id="customPromptBadge" style="display: none;">已填写</span>
                 </div>
                 <div class="summary-right">
-                  <span class="summary-hint">选填 · 推荐发型/姿态/光影</span>
+                  <span class="summary-hint">选填</span>
                   <i class="ph ph-caret-down summary-caret"></i>
                 </div>
               </summary>
@@ -418,9 +545,10 @@
               <summary class="prompt-inspector-summary">
                 <div class="summary-left">
                   <i class="ph ph-code"></i>
-                  <span class="summary-title">底层完整提示词预览与微调 (Prompt Inspector)</span>
+                  <span class="summary-title">完整提示词预览</span>
                 </div>
                 <div class="summary-right">
+                  <span class="summary-hint">选填</span>
                   <i class="ph ph-caret-down summary-caret"></i>
                 </div>
               </summary>
@@ -495,7 +623,12 @@
         <div class="progress-card" id="progressCard" style="display: none;">
           <div class="progress-header">
             <h3 id="progressCardTitle">生成进度</h3>
-            <span class="timer-badge" id="elapsedTimer">00:00</span>
+            <div class="progress-actions">
+              <span class="timer-badge" id="elapsedTimer">00:00</span>
+              <button type="button" class="btn-cancel-task" id="btnCancelTask" title="中断当前生成任务">
+                <i class="ph ph-x"></i> 取消
+              </button>
+            </div>
           </div>
           <div class="progress-bar-track">
             <div class="progress-bar-fill" id="progressBar" style="width: 5%;"></div>
@@ -655,6 +788,7 @@
         <div class="test-result-box" id="cfgTestResult" style="display: none;"></div>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="btnClearApiKey" style="margin-right: auto; color: #f87171; border-color: rgba(239, 68, 68, 0.3);"><i class="ph ph-trash"></i> 清除 Key</button>
         <button type="button" class="btn-secondary" id="btnTestApiConnection"><i class="ph ph-plugs"></i> 测试连接</button>
         <button type="button" class="btn-primary" id="btnSaveApiConfig"><i class="ph ph-check"></i> 保存配置</button>
       </div>

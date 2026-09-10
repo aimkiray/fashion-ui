@@ -1,0 +1,630 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "fashion_street_model.png"
+    }
+  },
+  "2": {
+    "class_type": "ResolutionSelector",
+    "inputs": {
+      "aspect_ratio": "3:4 (Portrait Standard)",
+      "megapixels": 0.86,
+      "multiple": 32,
+      "preview": ""
+    }
+  },
+  "3": {
+    "class_type": "easy int",
+    "inputs": {
+      "value": 5
+    }
+  },
+  "10": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "11": {
+    "class_type": "ModelPatchTorchSettings",
+    "inputs": {
+      "model": [
+        "10",
+        0
+      ],
+      "enable_fp16_accumulation": true
+    }
+  },
+  "12": {
+    "class_type": "PathchSageAttentionKJ",
+    "inputs": {
+      "model": [
+        "11",
+        0
+      ],
+      "sage_attention": "auto",
+      "allow_compile": true
+    }
+  },
+  "13": {
+    "class_type": "ModelAttentionBackend",
+    "inputs": {
+      "model": [
+        "12",
+        0
+      ],
+      "attention": "comfy kitchen attention"
+    }
+  },
+  "14": {
+    "class_type": "BlockSparseAttention",
+    "inputs": {
+      "model": [
+        "13",
+        0
+      ],
+      "selection": "Sol-Attn (adaptive tau)",
+      "selection.tau": 1.3,
+      "start_percent": 0.2,
+      "end_percent": 1,
+      "dense_blocks": "",
+      "min_tokens": 12288,
+      "extra_tokens": 256,
+      "sink_conditioning": "exact_kv_and_rows",
+      "verbose": false
+    }
+  },
+  "15": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "14",
+        0
+      ],
+      "lora_name": "H3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+      "strength_model": 1
+    }
+  },
+  "16": {
+    "class_type": "MiniMaxH3SigmaShift",
+    "inputs": {
+      "model": [
+        "15",
+        0
+      ],
+      "shift_video": 12,
+      "shift_audio": 3
+    }
+  },
+  "20": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    }
+  },
+  "21": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    }
+  },
+  "22": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    }
+  },
+  "30": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "3",
+        0
+      ]
+    }
+  },
+  "40": {
+    "class_type": "MiniMaxH3ImageToVideo",
+    "inputs": {
+      "clip": [
+        "20",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ],
+      "prompt": "生成一段5秒、真人写实、自然生活感时尚短视频，适用于 Minimax H3 首帧续写。阳光都市街拍·分镜一·迎面走姿。\n\n【最高优先级】\n严格保持首帧画面中模特的人脸、五官、发型、妆容、肤色、身材比例、服装与鞋履细节、街边建筑背景、自然日光、构图、镜头焦段和整体摄影质感不变。\n不要换脸，不要改变人物造型，不要改变服装款式与配色，不要改变场景。\n整段视频必须像真实街拍摄影师跟拍记录下的一段生活瞬间：\n自然、松弛、有编辑感、有生命感。\n不要刻意表演，不要短视频模板感，严格去掉AI味。\n\n━━━━━━━━━━━━━━━━━━\n【5秒核心动作】\n0.00－1.50秒\n模特从首帧的站姿自然起步，沿洒满阳光的人行道迎面走向镜头。\n起步自然：重心先微微前移，第一步不要突然迈大。\n她保持放松从容的状态，肩背舒展，眼神柔和地看向镜头。\n\n1.50－3.80秒\n她以稳定的节奏继续向前走，每秒约一步。\n不要匀速机械行走，步伐之间有非常轻微的自然节奏差。\n双臂在身体两侧自然摆动，手臂摆动与步伐自然交替。\n鞋底稳稳踩实地面，每一步都有真实的落地与推进。\n\n3.80－5.00秒\n她走到离镜头较近的位置，微微放慢脚步，保持与镜头的柔和对视，全身始终完整在画面中。\n不是突然停住，也不是机械匀速，接近镜头时动作自然减速。\n\n━━━━━━━━━━━━━━━━━━\n【表情与眼神｜必须执行】\n眼神变化遵循真实顺序：\n与镜头对视时，眼神先有细微的亮意，\n→ 面部肌肉保持放松，\n→ 形成从容、安静、亲切的神态。\n与镜头保持自然对视，头部带一点轻松的四分之三角度，眼神明亮而柔和。\n允许自然眨眼1次左右，\n允许非常细微的眼球移动和呼吸感。\n这些真实的不完美要保留。\n\n禁止：\n假表情、\n僵硬脸、\n突然咧嘴、\n过度露齿、\n空洞眼神、\n夸张眯眼、\n标准网红笑。\n模特全程自然闭唇、嘴角放松，不要张嘴，不要露齿笑。\n\n━━━━━━━━━━━━━━━━━━\n【真实人体动态】\n整个5秒不能像一张静态图片在动。\n保留非常轻微的真实人体运动：\n自然呼吸；\n肩颈细微起伏；\n身体重心随步伐自然前移；\n每一步都有真实的落地与惯性；\n眼睛有真实注视变化；\n允许自然眨眼；\n几缕碎发有极轻微晃动。\n所有动作必须有真实惯性和缓急变化。\n不要匀速，不要突然启动，不要突然停止，不要机械。\n\n━━━━━━━━━━━━━━━━━━\n【服装与手部】\n服装全程保持首帧中的款式、配色、剪裁与缝线细节。\n不要改变服装款式与细节，衣摆、袖口、缝线全程稳定。\n面料随动作有符合物理规律的自然摆动和惯性。\n禁止：服装变形、纹理跳动、凭空出现的拖尾或裙摆、衣服颜色变化。\n手部必须真实：\n五指正常，\n没有多指，\n没有粘连，\n没有穿模，\n手腕自然。\n双臂在身体两侧自然摆动，双手放松、手指自然张开，全程可见；\n\n━━━━━━━━━━━━━━━━━━\n【镜头】\n与模特视线等高的稳定后撤跟拍：镜头随模特同步平稳后撤，保持全身构图完整。\n不要推镜，不要拉镜，不要摇镜，不要环绕，不要突然变焦。\n焦点稳定在模特的脸部和服装上，背景呈现真实柔和的街景虚化。\n不要焦点乱跳。\n\n━━━━━━━━━━━━━━━━━━\n【画面质感】\n保持首帧真实自然的光线与色调。\n皮肤保留真实皮肤纹理：\n细微毛孔，\n真实肤质，\n柔和面部高光，\n眼睛真实反光，\n真实发丝边缘。\n不要过度磨皮，不要塑料皮肤，不要蜡像脸，不要过度锐化，不要假白，不要HDR感过重。\n\n━━━━━━━━━━━━━━━━━━\n【严格去除AI味】\n禁止出现：\n换脸，\n脸型变化，\n发型变化，\n五官漂移，\n牙齿闪烁，\n嘴巴变形，\n头发融化，\n手指畸形，\n滑步，\n脚步漂浮，\n服装凭空变化，\n背景物体闪烁，\n焦点乱跳，\n突然运镜，\n机械匀速动作，\n商业广告式表演，\n明显AI生成痕迹。\n\n━━━━━━━━━━━━━━━━━━\n【最终效果】\n她迎面自然走来，步伐真实有惯性，眼神与镜头自然交流，服装与街景与首帧完全一致，像真实街拍摄影师随手记录的一段生活瞬间。\n\n━━━━━━━━━━━━━━━━━━\n【音频】\n远处隐约的城市街道环境音，清晰有节奏的脚步声，衣物面料随步伐的轻微摆动声。",
+      "width": [
+        "2",
+        0
+      ],
+      "height": [
+        "2",
+        1
+      ],
+      "length": [
+        "30",
+        1
+      ],
+      "first_frame": [
+        "1",
+        0
+      ]
+    }
+  },
+  "41": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 777
+    }
+  },
+  "50": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "51": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "scheduler": "simple",
+      "steps": 4,
+      "denoise": 1
+    }
+  },
+  "52": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "conditioning": [
+        "40",
+        0
+      ]
+    }
+  },
+  "53": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "41",
+        0
+      ],
+      "guider": [
+        "52",
+        0
+      ],
+      "sampler": [
+        "50",
+        0
+      ],
+      "sigmas": [
+        "51",
+        0
+      ],
+      "latent_image": [
+        "40",
+        1
+      ]
+    }
+  },
+  "70": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "53",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ]
+    }
+  },
+  "71": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": [
+        "53",
+        0
+      ],
+      "vae": [
+        "22",
+        0
+      ]
+    }
+  },
+  "75": {
+    "class_type": "GetImageSizeAndCount",
+    "inputs": {
+      "image": [
+        "70",
+        0
+      ]
+    }
+  },
+  "76": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "(a - b)",
+      "values.a": [
+        "75",
+        3
+      ],
+      "values.b": [
+        "90",
+        0
+      ]
+    }
+  },
+  "77": {
+    "class_type": "GetImageRangeFromBatch",
+    "inputs": {
+      "images": [
+        "75",
+        0
+      ],
+      "start_index": [
+        "76",
+        1
+      ],
+      "num_frames": 39
+    }
+  },
+  "78": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "(a / 24)",
+      "values.a": [
+        "76",
+        1
+      ]
+    }
+  },
+  "79": {
+    "class_type": "TrimAudioDuration",
+    "inputs": {
+      "audio": [
+        "71",
+        0
+      ],
+      "start_index": [
+        "78",
+        0
+      ],
+      "duration": 512
+    }
+  },
+  "80": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "111",
+        0
+      ],
+      "audio": [
+        "93",
+        0
+      ],
+      "frame_rate": 48,
+      "loop_count": 0,
+      "filename_prefix": "video/fashion_streetwear_10s",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "bitrate": 30,
+      "megabit": true,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true
+    }
+  },
+  "81": {
+    "class_type": "MiniMaxH3ImageToVideo",
+    "inputs": {
+      "clip": [
+        "20",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ],
+      "prompt": "生成一段5秒、真人写实、自然生活感时尚短视频，适用于 Minimax H3 首帧续写。阳光都市街拍·分镜二·45°转体展示。\n\n【最高优先级】\n严格保持首帧画面中模特的人脸、五官、发型、妆容、肤色、身材比例、服装与鞋履细节、街边建筑背景、自然日光、构图、镜头焦段和整体摄影质感不变。\n不要换脸，不要改变人物造型，不要改变服装款式与配色，不要改变场景。\n整段视频必须像真实街拍摄影师跟拍记录下的一段生活瞬间：\n自然、松弛、有编辑感、有生命感。\n不要刻意表演，不要短视频模板感，严格去掉AI味。\n\n━━━━━━━━━━━━━━━━━━\n【5秒核心动作】\n0.00－1.50秒\n承接上一镜的行走，模特自然放慢脚步，平稳停下，双脚稳稳落地踩实。\n停步不是急刹车，而是像真实走秀结束那样带着惯性缓缓收住。\n\n1.50－3.20秒\n她以重心脚为轴，自然连贯地完成一个约45度的转身。\n转身时肩膀、腰部、腿部协同运动，重心转移真实，不要像机器人一样只旋转上半身。\n\n3.20－5.00秒\n转身后她稳定站定，展示服装的侧面与背面剪裁、面料垂感与缝线细节，随后自然回头看镜头，与镜头保持从容对视。\n\n━━━━━━━━━━━━━━━━━━\n【表情与眼神｜必须执行】\n眼神变化遵循真实顺序：\n与镜头对视时，眼神先有细微的亮意，\n→ 面部肌肉保持放松，\n→ 形成从容、安静、亲切的神态。\n转身站定后回头看镜头，眼神自然先有注视，再带出一点柔和的笑意，不要突然切换表情。\n允许自然眨眼1次左右，\n允许非常细微的眼球移动和呼吸感。\n这些真实的不完美要保留。\n\n禁止：\n假表情、\n僵硬脸、\n突然咧嘴、\n过度露齿、\n空洞眼神、\n夸张眯眼、\n标准网红笑。\n模特全程自然闭唇、嘴角放松，不要张嘴，不要露齿笑。\n\n━━━━━━━━━━━━━━━━━━\n【真实人体动态】\n整个5秒不能像一张静态图片在动。\n保留非常轻微的真实人体运动：\n自然呼吸；\n肩颈细微起伏；\n停步时身体带着惯性缓缓收住；\n转身时重心转移自然连贯；\n眼睛有真实注视变化；\n允许自然眨眼；\n几缕碎发有极轻微晃动。\n所有动作必须有真实惯性和缓急变化。\n不要匀速，不要突然启动，不要突然停止，不要机械。\n\n━━━━━━━━━━━━━━━━━━\n【服装与手部】\n服装全程保持首帧中的款式、配色、剪裁与缝线细节。\n不要改变服装款式与细节，衣摆、袖口、缝线全程稳定。\n面料随动作有符合物理规律的自然摆动和惯性。\n禁止：服装变形、纹理跳动、凭空出现的拖尾或裙摆、衣服颜色变化。\n手部必须真实：\n五指正常，\n没有多指，\n没有粘连，\n没有穿模，\n手腕自然。\n双臂自然垂于身体两侧，双手放松、全程可见；\n\n━━━━━━━━━━━━━━━━━━\n【镜头】\n稳定的慢速横移：镜头以平稳慢速的横移拍摄转身过程，突出面料、缝线与剪裁细节。\n不要突然运镜，不要变焦，不要环绕。\n焦点始终稳定在模特身上。\n\n━━━━━━━━━━━━━━━━━━\n【画面质感】\n保持首帧真实自然的光线与色调。\n皮肤保留真实皮肤纹理：\n细微毛孔，\n真实肤质，\n柔和面部高光，\n眼睛真实反光，\n真实发丝边缘。\n不要过度磨皮，不要塑料皮肤，不要蜡像脸，不要过度锐化，不要假白，不要HDR感过重。\n\n━━━━━━━━━━━━━━━━━━\n【严格去除AI味】\n禁止出现：\n换脸，\n脸型变化，\n发型变化，\n五官漂移，\n牙齿闪烁，\n嘴巴变形，\n头发融化，\n手指畸形，\n滑步，\n脚步漂浮，\n服装凭空变化，\n背景物体闪烁，\n焦点乱跳，\n突然运镜，\n机械匀速动作，\n商业广告式表演，\n明显AI生成痕迹。\n\n━━━━━━━━━━━━━━━━━━\n【最终效果】\n她平稳停步、自然完成45度转身，服装细节清晰稳定，随后回头与镜头从容对视，整个动作一气呵成、真实自然。\n\n━━━━━━━━━━━━━━━━━━\n【音频】\n连续的城市街道环境音，鞋底在人行道上的轻轻转身摩擦声，衣物随转身的轻微摆动声。",
+      "width": [
+        "2",
+        0
+      ],
+      "height": [
+        "2",
+        1
+      ],
+      "length": 163,
+      "first_frame": [
+        "1",
+        0
+      ]
+    }
+  },
+  "82": {
+    "class_type": "MiniMaxH3AddGuide",
+    "inputs": {
+      "positive": [
+        "81",
+        0
+      ],
+      "latent": [
+        "81",
+        1
+      ],
+      "frame_idx": 0,
+      "vae": [
+        "21",
+        0
+      ],
+      "audio_vae": [
+        "22",
+        0
+      ],
+      "image": [
+        "77",
+        0
+      ],
+      "audio": [
+        "79",
+        0
+      ]
+    }
+  },
+  "83": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "conditioning": [
+        "82",
+        0
+      ]
+    }
+  },
+  "84": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 778
+    }
+  },
+  "85": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": [
+        "16",
+        0
+      ],
+      "scheduler": "simple",
+      "steps": 4,
+      "denoise": 1
+    }
+  },
+  "86": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "84",
+        0
+      ],
+      "guider": [
+        "83",
+        0
+      ],
+      "sampler": [
+        "50",
+        0
+      ],
+      "sigmas": [
+        "85",
+        0
+      ],
+      "latent_image": [
+        "81",
+        1
+      ]
+    }
+  },
+  "88": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": [
+        "86",
+        0
+      ],
+      "vae": [
+        "22",
+        0
+      ]
+    }
+  },
+  "89": {
+    "class_type": "ImageBatchExtendWithOverlap",
+    "inputs": {
+      "source_images": [
+        "102",
+        0
+      ],
+      "new_images": [
+        "103",
+        0
+      ],
+      "overlap": 39,
+      "overlap_side": "source",
+      "overlap_mode": "linear_blend"
+    }
+  },
+  "90": {
+    "class_type": "easy int",
+    "inputs": {
+      "value": 39
+    }
+  },
+  "92": {
+    "class_type": "TrimAudioDuration",
+    "inputs": {
+      "audio": [
+        "88",
+        0
+      ],
+      "start_index": 1.625,
+      "duration": 512
+    }
+  },
+  "93": {
+    "class_type": "AudioConcat",
+    "inputs": {
+      "audio1": [
+        "71",
+        0
+      ],
+      "audio2": [
+        "92",
+        0
+      ],
+      "direction": "after"
+    }
+  },
+  "100": {
+    "class_type": "MinimaxH3LatentUpscaler3D",
+    "inputs": {
+      "latent": [
+        "104",
+        0
+      ],
+      "model_name": "minimax_h3_latent_upscaler_3d_fp16.safetensors",
+      "mode": "scale by multiplier",
+      "mode.scale": 1.5,
+      "align": 32,
+      "enable_temporal_chunking": true,
+      "force_unload": true,
+      "device": "cuda",
+      "precision": "fp16"
+    }
+  },
+  "101": {
+    "class_type": "MinimaxH3LatentUpscaler3D",
+    "inputs": {
+      "latent": [
+        "105",
+        0
+      ],
+      "model_name": "minimax_h3_latent_upscaler_3d_fp16.safetensors",
+      "mode": "scale by multiplier",
+      "mode.scale": 1.5,
+      "align": 32,
+      "enable_temporal_chunking": true,
+      "force_unload": true,
+      "device": "cuda",
+      "precision": "fp16"
+    }
+  },
+  "102": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "106",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ]
+    }
+  },
+  "103": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "107",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ]
+    }
+  },
+  "104": {
+    "class_type": "LTXVSeparateAVLatent",
+    "inputs": {
+      "av_latent": [
+        "53",
+        1
+      ]
+    }
+  },
+  "105": {
+    "class_type": "LTXVSeparateAVLatent",
+    "inputs": {
+      "av_latent": [
+        "86",
+        1
+      ]
+    }
+  },
+  "106": {
+    "class_type": "LTXVConcatAVLatent",
+    "inputs": {
+      "video_latent": [
+        "100",
+        0
+      ],
+      "audio_latent": [
+        "104",
+        1
+      ]
+    }
+  },
+  "107": {
+    "class_type": "LTXVConcatAVLatent",
+    "inputs": {
+      "video_latent": [
+        "101",
+        0
+      ],
+      "audio_latent": [
+        "105",
+        1
+      ]
+    }
+  },
+  "110": {
+    "class_type": "FrameInterpolationModelLoader",
+    "inputs": {
+      "model_name": "rife_v4.26.safetensors"
+    }
+  },
+  "111": {
+    "class_type": "FrameInterpolate",
+    "inputs": {
+      "interp_model": [
+        "110",
+        0
+      ],
+      "images": [
+        "89",
+        2
+      ],
+      "multiplier": 2
+    }
+  }
+}
