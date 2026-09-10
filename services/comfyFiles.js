@@ -10,6 +10,23 @@ function resolveComfyUrl(comfyUrl) {
   return comfyUrl || process.env.COMFY_URL || 'http://127.0.0.1:8188';
 }
 
+// LAN links can blip (EHOSTUNREACH etc.); retry transient network failures
+async function withRetries(fn, attempts = 3, backoffMs = 1500) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const code = e && e.cause && e.cause.code;
+      const transient = !code || ['EHOSTUNREACH', 'ENETUNREACH', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN'].includes(code);
+      if (!transient || i === attempts - 1) throw e;
+      await new Promise(r => setTimeout(r, backoffMs * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * Upload a local file into the remote ComfyUI input tree.
  * @returns {Promise<{name: string, subfolder: string, type: string}>} the
@@ -18,18 +35,20 @@ function resolveComfyUrl(comfyUrl) {
 async function uploadToComfyInput(localPath, { subfolder = 'online_temp', type = 'input', overwrite = true, comfyUrl } = {}) {
   const base = resolveComfyUrl(comfyUrl);
   const data = fs.readFileSync(localPath);
-  const fd = new FormData();
-  fd.append('image', new Blob([data]), path.basename(localPath));
-  fd.append('subfolder', subfolder);
-  fd.append('type', type);
-  fd.append('overwrite', String(overwrite));
-  const res = await fetch(`${base}/upload/image`, { method: 'POST', body: fd });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`ComfyUI 上传失败 (HTTP ${res.status}): ${String(detail).slice(0, 200)}`);
-  }
-  const j = await res.json();
-  return { name: j.name, subfolder: j.subfolder || subfolder, type: j.type || type };
+  return withRetries(async () => {
+    const fd = new FormData();
+    fd.append('image', new Blob([data]), path.basename(localPath));
+    fd.append('subfolder', subfolder);
+    fd.append('type', type);
+    fd.append('overwrite', String(overwrite));
+    const res = await fetch(`${base}/upload/image`, { method: 'POST', body: fd });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new Error(`ComfyUI 上传失败 (HTTP ${res.status}): ${String(detail).slice(0, 200)}`);
+    }
+    const j = await res.json();
+    return { name: j.name, subfolder: j.subfolder || subfolder, type: j.type || type };
+  });
 }
 
 /**
@@ -44,7 +63,7 @@ async function downloadFromComfy(ref, destPath, comfyUrl) {
     subfolder: ref.subfolder || '',
     type: ref.type || 'output'
   });
-  const res = await fetch(`${base}/view?${qs.toString()}`);
+  const res = await withRetries(() => fetch(`${base}/view?${qs.toString()}`));
   if (!res.ok) {
     throw new Error(`ComfyUI 文件获取失败 (HTTP ${res.status}): ${ref.filename}`);
   }
