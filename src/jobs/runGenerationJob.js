@@ -50,7 +50,8 @@ async function runGenerationJob(taskId, { signal } = {}) {
     action2: task.action2,
     hair_style: task.hair_style,
     face_shape: task.face_shape,
-    model_age: task.model_age
+    model_age: task.model_age,
+    composition: task.composition
   });
 
   const finalKreaPrompt = (task.custom_krea_prompt && task.custom_krea_prompt.trim()) || autoPrompts.krea_prompt;

@@ -212,9 +212,9 @@ test('restructured lookbook prompts: sections, prop arm replacement, teen protec
 test('environment props (bench / display window) are injected into the still and referenced by the video segments', () => {
   // 1/2. a1 与 a2 两种触发都注入对应环境物
   const b1 = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'pose' });
-  assert.ok(b1.krea_prompt.includes('A simple wooden bench at sitting height stands naturally beside the model'));
+  assert.ok(b1.krea_prompt.includes('A simple wooden park bench at sitting height stands naturally beside the model'));
   const b2 = computeTaskPrompts({ scene: 'street', action1: 'pose', action2: 'bench_sit' });
-  assert.ok(b2.krea_prompt.includes('A simple wooden bench at sitting height stands naturally beside the model'));
+  assert.ok(b2.krea_prompt.includes('A simple wooden park bench at sitting height stands naturally beside the model'));
 
   const w1 = computeTaskPrompts({ scene: 'street', action1: 'window_browse', action2: 'pose' });
   assert.ok(w1.krea_prompt.includes('A large glass display window with tastefully arranged items stands beside the model'));
@@ -228,7 +228,7 @@ test('environment props (bench / display window) are injected into the still and
     ['bench_sit', 'bag_shift', 'leather shoulder bag']
   ]) {
     const out = computeTaskPrompts({ scene: 'street', action1: a1, action2: a2 });
-    assert.ok(out.krea_prompt.includes('wooden bench'), `${a1}+${a2}: bench missing`);
+    assert.ok(out.krea_prompt.includes('park bench at sitting height'), `${a1}+${a2}: bench missing`);
     assert.ok(out.krea_prompt.includes(propText), `${a1}+${a2}: prop missing`);
     assert.ok(!out.krea_prompt.includes('arms resting naturally at sides'), `${a1}+${a2}: neutral arm sentence must be replaced`);
     assert.ok(!/Both (one arm|both hands)/.test(out.krea_prompt), `${a1}+${a2}: Both-prefix corruption`);
@@ -236,12 +236,12 @@ test('environment props (bench / display window) are injected into the still and
 
   // 5. 双环境物各恰好一次
   const bw = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'window_browse' });
-  assert.equal((bw.krea_prompt.match(/wooden bench/g) || []).length, 1);
+  assert.equal((bw.krea_prompt.match(/park bench/g) || []).length, 1);
   assert.equal((bw.krea_prompt.match(/glass display window/g) || []).length, 1);
 
   // 6. 无环境物动作不注入
   const wp = computeTaskPrompts({ scene: 'street', action1: 'walk', action2: 'pose' });
-  assert.ok(!wp.krea_prompt.includes('wooden bench'));
+  assert.ok(!wp.krea_prompt.includes('park bench'));
   assert.ok(!wp.krea_prompt.includes('glass display window'));
 
   // 7. 9 个生成点全部走 replace 路径（锁锚点：环境物句尾 + 锚点句同现）
@@ -257,7 +257,7 @@ test('environment props (bench / display window) are injected into the still and
 
   // 8. a1=a2 相同动作去重：环境物句恰好 1 次
   const dup = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'bench_sit' });
-  assert.equal((dup.krea_prompt.match(/wooden bench/g) || []).length, 1);
+  assert.equal((dup.krea_prompt.match(/park bench/g) || []).length, 1);
 
   // 9. 视频段确定性指涉首帧座位
   const s1 = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'pose' });
@@ -330,11 +330,41 @@ test('garment-layer invariants: jacket_adjust anchoring, zero residue, global lo
   const bench = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'pose' });
   assert.ok(bench.seg1_prompt.includes('座位在首帧画面中已经存在'));
   const win = computeTaskPrompts({ scene: 'street', action1: 'window_browse', action2: 'pose' });
-  assert.ok(win.seg1_prompt.includes('橱窗在首帧画面中已经存在'));
+  assert.ok(win.seg1_prompt.includes('若首帧画面中有橱窗/展陈'));
   const sip = computeTaskPrompts({ scene: 'cafe', action1: 'coffee_sip', action2: 'pose' });
   assert.ok(sip.seg1_prompt.includes('轻抿咖啡时自然启唇啜饮'));
   const walk = computeTaskPrompts({ scene: 'street', action1: 'walk', action2: 'pose' });
   assert.ok(walk.seg1_prompt.includes('模特全程自然闭唇'));
+});
+
+test('composition modes: center/left/right/auto produce the correct section text and seg wording', () => {
+  const center = computeTaskPrompts({ scene: 'street', composition: 'center' });
+  assert.ok(center.krea_prompt.includes('centered symmetrical composition'));
+  assert.ok(!/rule-of-thirds/.test(center.krea_prompt), 'center mode must not carry thirds wording');
+  assert.ok(center.seg1_prompt.includes('居中对称布局'));
+  assert.ok(center.seg2_prompt.includes('居中对称布局'));
+
+  const left = computeTaskPrompts({ scene: 'street', composition: 'left' });
+  assert.ok(left.krea_prompt.includes('the left third line'));
+  const right = computeTaskPrompts({ scene: 'street', composition: 'right' });
+  assert.ok(right.krea_prompt.includes('the right third line'));
+
+  const auto = computeTaskPrompts({ scene: 'street', composition: 'auto' });
+  assert.ok(auto.krea_prompt.includes('the left third line') || auto.krea_prompt.includes('the right third line'));
+  assert.ok(auto.seg1_prompt.includes('三分法布局'));
+  assert.ok(!auto.seg1_prompt.includes('居中对称布局'));
+
+  // 非法值双层回退 auto
+  const bogus = computeTaskPrompts({ scene: 'street', composition: 'bogus' });
+  const sideOf = (t) => /the (left|right) third line/.exec(t)[1];
+  assert.equal(sideOf(bogus.krea_prompt), sideOf(auto.krea_prompt));
+
+  // 分支跟随模式
+  const mi = computeTaskPrompts({ scene: 'street', composition: 'center', model_image: 'm.png' });
+  assert.ok(mi.krea_prompt.includes('centered symmetrical composition'));
+  // jacket_adjust 机位措辞已与构图模式解耦
+  const ja = computeTaskPrompts({ scene: 'street', action1: 'jacket_adjust', action2: 'pose' });
+  assert.ok(!ja.krea_prompt.includes('对称中轴线'), 'camera wording must not conflict with off-center modes');
 });
 
 test('computeTaskPrompts injects props into Stage 1 and adapts kid posture', () => {

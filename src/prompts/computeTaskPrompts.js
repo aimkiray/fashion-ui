@@ -82,7 +82,7 @@ function computeTaskPrompts({
   }
 
   const { action1: a1, action2: a2 } = resolveActions(action1, action2, sceneConfig.id);
-  kreaPrompt = injectActionProps(kreaPrompt, a1, a2);
+  kreaPrompt = injectActionProps(kreaPrompt, a1, a2, sceneConfig.id);
 
   // 道具/环境物仅由 seg2 触发时（a1 不涉及），seg1 提示词也要锚定它们的存在：
   // 定妆照对两个分镜共享首帧，seg1 不提它们，H3 可能中途删掉、seg2 又需要。
@@ -154,13 +154,33 @@ const PROP_COMBOS = {
 
 // 环境物依赖：这些动作的节拍需要场景中存在对应物件。物件必须进入定妆照
 // （= 视频首帧），H3 才不会让它们在视频中凭空出现。
+// 环境物依赖：动作节拍需要场景中存在对应物件。物件必须进入定妆照
+// （= 视频首帧），H3 才不会让它们在视频中凭空出现。
+// 按场景给出贴切变体；null = 该场景没有自然的对应物（不注入——节拍已
+// 条件式化，H3 会按"景致/陈列"泛化处理，不会凭空生成突兀物体）。
 const ENV_PROPS = ['bench_sit', 'window_browse'];
-const SCENE_PROPS = {
-  bench_sit: 'A simple wooden bench at sitting height stands naturally beside the model in the scene, positioned clear of the figure and fully visible',
-  window_browse: 'A large glass display window with tastefully arranged items stands beside the model in the scene'
+const SCENE_ENV_PROPS = {
+  bench_sit: {
+    street: 'A simple wooden park bench at sitting height stands naturally beside the model, positioned clear of the figure and fully visible',
+    outdoor: 'A simple wooden park bench at sitting height stands naturally beside the model, positioned clear of the figure and fully visible',
+    office: 'A modern upholstered lobby bench at sitting height stands naturally beside the model, positioned clear of the figure and fully visible',
+    boutique: 'A minimalist display bench at sitting height stands naturally beside the model, positioned clear of the figure and fully visible',
+    cafe: 'A wooden cafe bench at sitting height stands naturally beside the model, positioned clear of the figure and fully visible',
+    studio: 'A minimal wooden bench prop at sitting height stands naturally beside the model in the studio, positioned clear of the figure and fully visible',
+    custom: 'A bench at sitting height stands naturally beside the model, positioned clear of the figure and fully visible'
+  },
+  window_browse: {
+    street: 'A large glass display window with tastefully arranged items stands beside the model in the scene',
+    boutique: 'A large glass display window with tastefully arranged items stands beside the model in the scene',
+    office: 'A glass display case stands beside the model in the lobby',
+    cafe: 'The large street-facing cafe window is beside the model, showing a soft view of the street outside',
+    outdoor: null,   // 公园/林荫没有店铺橱窗——不注入，节拍按"景致"泛化
+    custom: null,    // 自定义场景可能没有橱窗——不注入，节拍按"景致"泛化
+    studio: null     // 影棚灰幕无橱窗（随机池已过滤；显式选择走泛化节拍）
+  }
 };
 
-function injectActionProps(promptText, a1, a2) {
+function injectActionProps(promptText, a1, a2, sceneId) {
   const used = ['coffee_sip', 'phone_check', 'bag_shift'].filter(a => a1 === a || a2 === a);
   let out = promptText;
 
@@ -178,7 +198,7 @@ function injectActionProps(promptText, a1, a2) {
   // 2) 环境物：长椅/橱窗等动作依赖的场景物件，必须出现在定妆照（首帧）里，
   //    否则 H3 会在视频中凭空变出长椅——"长椅突兀出现"问题的根源。
   const env = ENV_PROPS.filter(a => a1 === a || a2 === a)
-    .map(a => SCENE_PROPS[a] + '.')
+    .map(a => (SCENE_ENV_PROPS[a] && SCENE_ENV_PROPS[a][sceneId]) || null).filter(Boolean).map(t => t + '.')
     .join(' ');
   if (env) {
     if (/props stay small and secondary if present/i.test(out)) {
