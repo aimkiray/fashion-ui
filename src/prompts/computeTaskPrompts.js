@@ -139,16 +139,43 @@ const PROP_COMBOS = {
   'coffee_sip+phone_check+bag_shift': 'one hand holding a sleek takeaway coffee cup at waist height while the other hand holds a sleek modern smartphone at chest height, a stylish chic leather shoulder bag worn over one shoulder, fingers relaxed and fully visible with five natural fingers'
 };
 
+// 环境物依赖：这些动作的节拍需要场景中存在对应物件。物件必须进入定妆照
+// （= 视频首帧），H3 才不会让它们在视频中凭空出现。
+const ENV_PROPS = ['bench_sit', 'window_browse'];
+const SCENE_PROPS = {
+  bench_sit: 'A simple wooden bench at sitting height stands naturally beside the model in the scene, positioned clear of the figure and fully visible.',
+  window_browse: 'A large glass display window with tastefully arranged items stands beside the model in the scene.'
+};
+
 function injectActionProps(promptText, a1, a2) {
   const used = ['coffee_sip', 'phone_check', 'bag_shift'].filter(a => a1 === a || a2 === a);
-  if (!used.length) return promptText;
-  const propText = PROP_COMBOS[used.join('+')] || PROP_POSE[used[0]];
+  let out = promptText;
 
-  if (ARM_PHRASE.test(promptText)) {
-    return promptText.replace(ARM_PHRASE, propText);
+  // 1) 手持道具：替换中性臂句（道具动作与"双臂垂放"硬冲突）
+  const held = used.filter(a => PROP_POSE[a]);
+  if (held.length) {
+    const propText = PROP_COMBOS[held.join('+')] || PROP_POSE[held[0]];
+    if (ARM_PHRASE.test(out)) {
+      out = out.replace(ARM_PHRASE, propText);
+    } else {
+      out = out + ', ' + propText;
+    }
   }
-  // 兜底：找不到姿态句时追加（不应发生，留作安全网）
-  return promptText + ', ' + propText;
+
+  // 2) 环境物：长椅/橱窗等动作依赖的场景物件，必须出现在定妆照（首帧）里，
+  //    否则 H3 会在视频中凭空变出长椅——"长椅突兀出现"问题的根源。
+  const env = ENV_PROPS.filter(a => a1 === a || a2 === a)
+    .map(a => SCENE_PROPS[a])
+    .join(' ');
+  if (env) {
+    if (/props stay small and secondary if present/i.test(out)) {
+      out = out.replace(/props stay small and secondary if present/i,
+        `${env} Props stay small and secondary if present.`);
+    } else {
+      out = out + ' ' + env;
+    }
+  }
+  return out;
 }
 
 function resolveBatchActions(selectedScenes = [], action1 = 'random', action2 = 'random') {
