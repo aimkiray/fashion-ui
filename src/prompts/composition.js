@@ -22,10 +22,11 @@ function buildCompositionInstructions(key) {
   const side = hashKey(key) % 2 === 0 ? 'left' : 'right';
   const open = side === 'left' ? 'right' : 'left';
   const text =
-    `rule-of-thirds framing — offset the figure to the ${side} third of the frame ` +
-    `instead of dead center, with the eyes close to the upper-third line; ` +
+    `rule-of-thirds framing — place the figure's central axis on the ${side} third line ` +
+    `of the frame (about one third of the frame width in from the ${side} edge) instead of dead center; ` +
     `keep about 10% of the frame height of headroom above the hair and 4-6% of floor below the feet, ` +
-    `so the figure spans roughly 82-88% of the frame height and never touches the frame edges; ` +
+    `so the figure spans roughly 82-88% of the frame height and never touches the frame edges ` +
+    `(the head sits within the upper third of the frame); ` +
     `leave gentle negative space on the ${open} side of the frame to balance the pose.`;
   return { side, open, text };
 }

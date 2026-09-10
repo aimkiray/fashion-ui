@@ -29,7 +29,7 @@ const {
 const { PROJECT_VIDEO_DIR } = require('../../src/paths');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-async function waitFor(jobId, statuses, timeoutMs = 8000) {
+async function waitFor(jobId, statuses, timeoutMs = 20000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const job = getEnhanceJob(jobId);

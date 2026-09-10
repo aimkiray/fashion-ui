@@ -18,7 +18,7 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian female editorial model', 'stylish East Asian male editorial model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`street:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
+      const composition = buildCompositionInstructions(`street:${gender}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -46,7 +46,7 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'professional East Asian female model', 'professional East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`studio:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
+      const composition = buildCompositionInstructions(`studio:${gender}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -74,7 +74,7 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'chic East Asian professional female model', 'chic East Asian professional male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`office:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
+      const composition = buildCompositionInstructions(`office:${gender}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -102,7 +102,7 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'graceful East Asian female fashion model', 'graceful East Asian male fashion model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`boutique:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
+      const composition = buildCompositionInstructions(`boutique:${gender}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -130,7 +130,7 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'natural East Asian female model', 'natural East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`outdoor:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
+      const composition = buildCompositionInstructions(`outdoor:${gender}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -158,7 +158,7 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian female model', 'stylish East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`cafe:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
+      const composition = buildCompositionInstructions(`cafe:${gender}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -190,7 +190,7 @@ const SCENES = {
       const sceneDesc = /^(in|on|at|against|under|near|along)\b/i.test(rawScene)
         ? rawScene.replace(/^(In|On|At|Against|Under|Near|Along)\b/, (m) => m.toLowerCase())
         : `in ${rawScene}`;
-      const composition = buildCompositionInstructions(`custom:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
+      const composition = buildCompositionInstructions(`custom:${gender}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,

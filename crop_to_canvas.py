@@ -24,7 +24,7 @@ from PIL import Image
 #     — upstream coerced the size hard), the crop is anchored at the frame
 #     top (zero top crop) and the whole excess is taken from below: the
 #     prompt's headroom instruction is what guarantees the composition then.
-# Prompt-level headroom ("at least 12% of the frame height above the hair")
+# Prompt-level headroom (~10% of the frame height above the hair)
 # keeps this crop small in the first place.
 
 TOP_BIAS = 0.25
