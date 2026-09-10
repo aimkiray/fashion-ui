@@ -108,6 +108,9 @@ function saveConfig(newConfig) {
   }
   if (typeof newConfig.openaiImageQuality === 'string' && newConfig.openaiImageQuality.trim()) {
     persistedConfig.openaiImageQuality = newConfig.openaiImageQuality.trim();
+    // Keep env in sync — .env pins OPENAI_IMAGE_QUALITY at boot and env wins
+    // in getRawConfig, so without this the UI quality change is silently ignored.
+    process.env.OPENAI_IMAGE_QUALITY = persistedConfig.openaiImageQuality;
   }
 
   try {

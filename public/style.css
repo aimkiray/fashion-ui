@@ -1769,7 +1769,13 @@ kbd {
 .history-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: 12px;
+  column-gap: 12px;
+  row-gap: 0;
+  /* Masonry: rows are 2px units; JS spans each card over enough rows to fit
+     its natural height + 12px spacing, packing cards with no holes. */
+  grid-auto-rows: 2px;
+  grid-auto-flow: row dense;
+  align-items: start;
 }
 
 .history-card {
@@ -1821,6 +1827,30 @@ kbd {
   background: rgba(217, 92, 92, 0.16);
 }
 
+/* "Generate video from this still" — compact inline action on image cards */
+.history-video-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(19, 18, 21, 0.6);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.history-video-btn:hover {
+  color: var(--accent, #d15468);
+  border-color: var(--accent, #d15468);
+  background: rgba(209, 84, 104, 0.16);
+}
+
 .history-card.history-deleting {
   opacity: 0.45;
   pointer-events: none;
@@ -1840,6 +1870,14 @@ kbd {
   width: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* Real thumbnails follow their natural aspect ratio — a fixed 3/4 frame with
+   object-fit: cover crops 9:16 / 1:1 / 2:3 outputs. The empty-state div keeps
+   its 3/4 placeholder shape from the base rule above. */
+img.history-thumb {
+  aspect-ratio: auto;
+  height: auto;
 }
 
 /* Icon-only fallback when a history video has no preview frame */

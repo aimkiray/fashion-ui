@@ -6,6 +6,56 @@ const { getRawConfig } = require('../config');
 const OPENAI_IMAGE_OUTPUT_REQUIREMENTS =
   'Output requirements: portrait orientation, preserve the exact clothing design, silhouette, fabric drape, and colors from the reference garment as faithfully as possible, with realistic human anatomy and grounded posture.';
 
+// Image generation through budget relays can legitimately take several minutes
+// (queued cheap channels + quality:high). 3 min was too tight and caused
+// guaranteed timeouts; 10 min per attempt leaves room for slow upstreams.
+const IMAGE_REQUEST_TIMEOUT_MS = 600000;
+
+// Real streaming relays start emitting SSE partials within the first minute.
+// If no response headers arrive within this window the upstream is hanging —
+// abandon streaming fast and degrade to non-stream instead of dead-waiting.
+const STREAM_TTFB_TIMEOUT_MS = 120000;
+
+// Silence watchdog for an open SSE stream: some gateways accept the upgrade
+// instantly but the upstream never emits a single event. If no bytes arrive
+// for this long, cancel the stream and fall back to non-stream.
+// (env override GPT2_STREAM_SILENCE_MS exists for deterministic tests)
+const STREAM_SILENCE_TIMEOUT_MS = Number(process.env.GPT2_STREAM_SILENCE_MS) || 180000;
+
+// Transient upstream conditions worth retrying: rate limit + gateway blips.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Human-friendly message for gateway/origin failures common with relays.
+function httpErrorMessage(status, detail) {
+  if (status === 524 || status === 504) {
+    return `上游通道无响应 (HTTP ${status} 网关超时)：中转站背后的生成通道当前不可用或过载，请稍后重试，或在「⚙️ 配置 API」中更换 API 线路${detail ? ` [${detail}]` : ''}`;
+  }
+  return detail || `OpenAI API 请求失败 (${status})`;
+}
+
+function isTimeoutErr(err) {
+  return !!err && (err.name === 'TimeoutError' || err.name === 'AbortError');
+}
+
+// Stream attempt: cap time-to-first-byte so a hanging upstream fails within
+// STREAM_TTFB_TIMEOUT_MS; once headers arrive, arm the full total-time budget.
+async function fetchStreamWithTtfbCap(endpoint, options) {
+  const ac = new AbortController();
+  const ttfbTimer = setTimeout(() => ac.abort(), STREAM_TTFB_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, { ...options, signal: ac.signal });
+    clearTimeout(ttfbTimer);
+    // Headers arrived; SSE activity or the final image should follow. Keep a
+    // generous total cap for slow-but-alive upstreams.
+    setTimeout(() => ac.abort(), IMAGE_REQUEST_TIMEOUT_MS);
+    return response;
+  } finally {
+    clearTimeout(ttfbTimer);
+  }
+}
+
 // Convert local file to base64 Data URL
 function fileToDataUrl(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -21,16 +71,18 @@ function fileToDataUrl(filePath) {
   return `data:${mime};base64,${b64}`;
 }
 
-// Map aspect ratio to dimensions supported by gpt-image-2 (divisible by 16)
+// Map aspect ratio to sizes the upstream actually supports. gpt-image-2 only
+// accepts 1024x1024 / 1024x1536 / 1536x1024 — verified empirically: the relay
+// silently coerces anything else (864x1536, 1024x1360) to 1024x1536. The
+// selected aspect ratio is restored afterwards by crop_to_aspect.py.
 function mapAspectRatioToSize(aspectRatio) {
   switch (aspectRatio) {
-    case '9:16':
-      return '864x1536';
     case '1:1':
       return '1024x1024';
+    case '9:16':
     case '3:4':
     default:
-      return '1024x1360';
+      return '1024x1536'; // official portrait (2:3) — closest superset of both
   }
 }
 
@@ -47,6 +99,37 @@ function extractImageFromPayload(payload) {
   return null;
 }
 
+// Read one SSE chunk with a silence watchdog: if no bytes arrive within
+// STREAM_SILENCE_TIMEOUT_MS, cancel the stream so the pending read settles
+// (with a grace fallback in case cancel() does not settle it).
+function readChunkWithWatchdog(stream, reader) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let grace = null;
+    const finish = (fn, arg) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(silence);
+      if (grace) clearTimeout(grace);
+      fn(arg);
+    };
+    const silence = setTimeout(() => {
+      console.warn('[GPT Image 2] 流式通道静默超时（无任何数据），中止流式读取...');
+      // reader.cancel() settles the pending read with {done:true} per spec;
+      // the 5s grace fallback below guarantees the watchdog always resolves.
+      try {
+        const c = reader.cancel('silence timeout');
+        if (c && typeof c.catch === 'function') c.catch(() => {});
+      } catch (e) {}
+      grace = setTimeout(() => finish(resolve, { done: true, value: undefined }), 5000);
+    }, STREAM_SILENCE_TIMEOUT_MS);
+    reader.read().then(
+      (res) => finish(resolve, res),
+      (err) => finish(reject, err)
+    );
+  });
+}
+
 async function relayOpenAiStream(stream, onProgress) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -55,7 +138,7 @@ async function relayOpenAiStream(stream, onProgress) {
   let partialCount = 0;
 
   while (true) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readChunkWithWatchdog(stream, reader);
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
@@ -114,6 +197,40 @@ async function relayOpenAiStream(stream, onProgress) {
   }
 
   return finalBase64;
+}
+
+/**
+ * fetch with retry for transient failures (429/5xx/network errors/timeouts).
+ * Returns the raw Response for 2xx and non-retryable 4xx so the caller can
+ * decide how to degrade; throws the last error once all attempts are spent.
+ */
+async function fetchWithRetry(requestFactory, { attempts = 3, backoffMs = [2000, 5000], label = 'GPT Image 2' } = {}) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (attempt > 1) {
+      const wait = backoffMs[Math.min(attempt - 2, backoffMs.length - 1)] || 2000;
+      console.warn(`[${label}] 第 ${attempt}/${attempts} 次尝试，等待 ${wait}ms 后重试...`);
+      await sleep(wait);
+    }
+    try {
+      const response = await requestFactory();
+      if (!RETRYABLE_STATUS.has(response.status)) {
+        return response;
+      }
+      let detail = '';
+      try {
+        detail = (await response.json())?.error?.message || '';
+      } catch (e) {}
+      console.warn(`[${label}] 可重试的 HTTP ${response.status}${detail ? ` (${detail})` : ''}`);
+      lastErr = new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
+    } catch (err) {
+      console.warn(`[${label}] 请求失败: ${err.message}`);
+      lastErr = err;
+      // A hung upstream will hang again on retry — timeout means stop retrying.
+      if (isTimeoutErr(err)) break;
+    }
+  }
+  throw lastErr || new Error(`${label} 请求失败`);
 }
 
 /**
@@ -181,68 +298,73 @@ async function generateGptImage2({
     onProgress(12, '[GPT Image 2] 正在向 OpenAI 发起图像生成请求...');
   }
 
-  const requestBody = {
+  const baseBody = {
     model: config.openaiImageModel || 'gpt-image-2',
     prompt: fullPrompt,
     images: images,
     size: imageSize,
     quality: config.openaiImageQuality || 'high',
-    output_format: 'png',
-    stream: true,
-    partial_images: 2
+    output_format: 'png'
   };
+  const requestBody = { ...baseBody, stream: true, partial_images: 2 };
+  const nonStreamBody = { ...baseBody };
 
-  let response;
-  let usedStream = true;
+  // Non-stream request with retries (3 attempts: 2s, 5s backoff; a hung
+  // upstream aborts after the timeout instead of burning all attempts).
+  const requestNonStream = async () => fetchWithRetry(() => fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(nonStreamBody),
+    signal: AbortSignal.timeout(IMAGE_REQUEST_TIMEOUT_MS)
+  }), { attempts: 3, backoffMs: [2000, 5000] });
 
+  let response = null;
+  let usedStream = false;
+  let nonStreamFailed = false;
+  let nonStreamErrMsg = '';
+
+  // 1) NON-STREAM FIRST: the current relay accepts stream requests but never
+  //    delivers image data on them, while non-stream returns the image in
+  //    seconds. Stream is kept only as a fallback for stream-only channels.
   try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(180000)
-    });
+    response = await requestNonStream();
   } catch (netErr) {
-    throw new Error(`无法连接到 OpenAI 图像服务: ${netErr.message}`);
+    nonStreamFailed = true;
+    nonStreamErrMsg = netErr.message;
+    console.warn(`[GPT Image 2] 非流式请求失败 (${netErr.message})，降级为流式请求...`);
   }
 
-  // If streaming request fails with 400 or 422 (common with non-streaming reverse proxies), retry with stream: false
-  if (!response.ok && (response.status === 400 || response.status === 422)) {
-    let errPayload = null;
-    try { errPayload = await response.clone().json(); } catch (e) {}
-    const errMsg = errPayload?.error?.message || '';
+  // 2) Non-stream explicitly rejected with 400/422 (some channels only
+  //    accept streaming) → one stream fallback attempt.
+  if (response && !response.ok && (response.status === 400 || response.status === 422)) {
+    try { nonStreamErrMsg = (await response.json())?.error?.message || ''; } catch (e) {}
+    console.warn(`[GPT Image 2] 非流式请求返回 HTTP ${response.status} (${nonStreamErrMsg})，降级为流式请求...`);
+    nonStreamFailed = true;
+  }
 
-    console.warn(`[GPT Image 2] 流式请求返回 HTTP ${response.status} (${errMsg})，尝试降级为非流式直接请求...`);
-    usedStream = false;
-    const nonStreamBody = {
-      model: config.openaiImageModel || 'gpt-image-2',
-      prompt: fullPrompt,
-      images: images,
-      size: imageSize,
-      quality: config.openaiImageQuality || 'high',
-      output_format: 'png'
-    };
+  if (nonStreamFailed) {
     try {
-      response = await fetch(endpoint, {
+      response = await fetchWithRetry(() => fetchStreamWithTtfbCap(endpoint, {
         method: 'POST',
         headers,
-        body: JSON.stringify(nonStreamBody),
-        signal: AbortSignal.timeout(180000)
-      });
-    } catch (retryErr) {
-      throw new Error(`OpenAI 图像非流式重试失败: ${retryErr.message}`);
+        body: JSON.stringify(requestBody)
+      }), { attempts: 1 });
+      usedStream = true;
+    } catch (streamErr) {
+      if (response && !response.ok) {
+        throw new Error(httpErrorMessage(response.status, nonStreamErrMsg));
+      }
+      throw new Error(`OpenAI 图像请求失败 (非流式与流式均不可用): ${streamErr.message}`);
     }
   }
 
   if (!response.ok) {
-    let message = `OpenAI API 请求失败 (${response.status})`;
+    let detail = '';
     try {
       const payload = await response.json();
-      if (payload.error && payload.error.message) {
-        message = payload.error.message;
-      }
+      detail = payload?.error?.message || '';
     } catch (e) {}
-    throw new Error(message);
+    throw new Error(httpErrorMessage(response.status, detail));
   }
 
   let base64Output = null;
@@ -254,10 +376,13 @@ async function generateGptImage2({
     } catch (streamErr) {
       console.warn('[GPT Image 2] 流式解析中断:', streamErr.message);
     }
+    if (!base64Output) {
+      console.warn('[GPT Image 2] 流式兜底响应未包含图像数据。');
+    }
   }
 
-  // If streaming didn't produce base64Output (or if response wasn't event-stream)
-  if (!base64Output) {
+  // Non-stream path (default): parse the JSON body for the image.
+  if (!base64Output && !usedStream) {
     try {
       const payload = await response.json();
       base64Output = extractImageFromPayload(payload);
@@ -291,6 +416,24 @@ async function generateGptImage2({
   const savedFilename = `gpt2_${task.scene.id || 'scene'}_${taskId}.png`;
   const destPath = path.join(projectImageDir, savedFilename);
   fs.writeFileSync(destPath, imageBuffer);
+
+  // Restore the exact selected aspect ratio: the upstream coerced the size to
+  // its official set (e.g. portrait -> 1024x1536), so center-crop back to the
+  // user's choice. No upscale — only pixels are removed, never invented.
+  const ratioParts = String(task.aspect_ratio || '3:4').split(':');
+  const ratioW = parseInt(ratioParts[0], 10);
+  const ratioH = parseInt(ratioParts[1], 10);
+  if (ratioW > 0 && ratioH > 0) {
+    try {
+      require('child_process').execFileSync(
+        process.platform === 'win32' ? 'python' : 'python3',
+        [path.join(__dirname, '..', '..', 'crop_to_aspect.py'), destPath, destPath, String(ratioW), String(ratioH)],
+        { timeout: 10000 }
+      );
+    } catch (cropErr) {
+      console.warn('[GPT Image 2] 按所选比例裁剪失败，保留上游原始尺寸:', cropErr.message);
+    }
+  }
 
   if (typeof onProgress === 'function') {
     onProgress(40, '[GPT Image 2] 定妆照已生成并保存。');

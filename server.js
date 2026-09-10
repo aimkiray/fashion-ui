@@ -99,6 +99,35 @@ function conformImageToCanvas(srcPath, dstPath, width, height) {
   fs.copyFileSync(srcPath, dstPath);
 }
 
+// Read PNG pixel dimensions straight from the IHDR header (no image library needed)
+function readPngDims(filePath) {
+  try {
+    const buf = Buffer.alloc(24);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buf, 0, 24, 0);
+    fs.closeSync(fd);
+    if (buf.toString('ascii', 12, 16) !== 'IHDR') return null;
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Pick the video canvas whose aspect ratio best matches the given image
+function nearestCanvasKey(width, height) {
+  const ratio = width / height;
+  let best = null;
+  let bestDiff = Infinity;
+  for (const [key, c] of Object.entries(ASPECT_CANVAS)) {
+    const diff = Math.abs(c.width / c.height - ratio);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = key;
+    }
+  }
+  return best;
+}
+
 // Fail fast with a clear error if the workflow templates drift from the node
 // ids this server patches, instead of a cryptic TypeError mid-generation.
 function requireNodes(wf, label, ids) {
@@ -1057,17 +1086,30 @@ app.post('/api/generate', async (req, res) => {
     custom_prompt = '',
     aspect_ratio = '3:4',
     mode = 'video',
-    still_engine = 'krea2',
+    still_engine = 'gpt_image_2',
     krea_prompt = null,
     seg1_prompt = null,
     seg2_prompt = null,
     action1 = 'random',
     action2 = 'random',
     hair_style = 'natural',
-    face_shape = 'oval'
+    face_shape = 'oval',
+    existing_still = null
   } = req.body;
 
-  if (!image) {
+  // Optional: skip Stage 1 and reuse an existing still photo for video generation
+  let sanitizedExistingStill = null;
+  if (existing_still) {
+    sanitizedExistingStill = path.basename(String(existing_still));
+    if (!/\.(png|jpe?g|webp)$/i.test(sanitizedExistingStill)) {
+      return res.status(400).json({ error: `不支持的定妆照格式: ${sanitizedExistingStill}` });
+    }
+    if (!fs.existsSync(path.join(PROJECT_IMAGE_DIR, sanitizedExistingStill))) {
+      return res.status(400).json({ error: `找不到指定的定妆照: ${sanitizedExistingStill}` });
+    }
+  }
+
+  if (!image && !sanitizedExistingStill) {
     return res.status(400).json({ error: '缺少服装图片文件名' });
   }
 
@@ -1075,9 +1117,8 @@ app.post('/api/generate', async (req, res) => {
   const modelStyleKey = MODEL_STYLES[model_style] ? model_style : 'classic';
 
   // Prevent path traversal attacks
-  const sanitizedImage = path.basename(image);
-  const srcInputPath = path.join(PROJECT_INPUT_DIR, sanitizedImage);
-  if (!fs.existsSync(srcInputPath)) {
+  const sanitizedImage = image ? path.basename(image) : null;
+  if (sanitizedImage && !fs.existsSync(path.join(PROJECT_INPUT_DIR, sanitizedImage))) {
     return res.status(400).json({ error: `找不到指定的服装图片: ${sanitizedImage}` });
   }
 
@@ -1112,6 +1153,7 @@ app.post('/api/generate', async (req, res) => {
     action2: normTaskAction(action2, 'random'),
     hair_style: HAIRSTYLES[hair_style] ? hair_style : 'natural',
     face_shape: FACE_SHAPES[face_shape] ? face_shape : 'oval',
+    existing_still: sanitizedExistingStill,
     mode,
     stillImage: null,
     videoUrl: null,
@@ -1171,7 +1213,7 @@ app.post('/api/generate-batch', async (req, res) => {
     custom_scene = '',
     aspect_ratio = '3:4',
     mode = 'video',
-    still_engine = 'krea2',
+    still_engine = 'gpt_image_2',
     krea_prompt = null,
     seg1_prompt = null,
     seg2_prompt = null,
@@ -1301,12 +1343,17 @@ app.get('/api/history', (req, res) => {
         const fullPath = path.join(PROJECT_VIDEO_DIR, f);
         const stat = fs.statSync(fullPath);
         const previewName = f.replace(/-audio\.mp4$|\.mp4$/, '.png');
-        const hasPreview = fs.existsSync(path.join(PROJECT_VIDEO_DIR, previewName));
+        const previewPath = path.join(PROJECT_VIDEO_DIR, previewName);
+        const hasPreview = fs.existsSync(previewPath);
+        // Dimensions let the client reserve the thumbnail box before load (no masonry jank)
+        const previewDims = hasPreview ? readPngDims(previewPath) : null;
         list.push({
           type: 'video',
           filename: f,
           url: `/outputs/videos/${f}`,
           previewUrl: hasPreview ? `/outputs/videos/${previewName}` : null,
+          width: previewDims ? previewDims.w : null,
+          height: previewDims ? previewDims.h : null,
           size: (stat.size / 1024 / 1024).toFixed(2) + ' MB',
           createdAt: stat.mtime
         });
@@ -1319,11 +1366,14 @@ app.get('/api/history', (req, res) => {
       imgFiles.filter(f => f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.webp')).forEach(f => {
         const fullPath = path.join(PROJECT_IMAGE_DIR, f);
         const stat = fs.statSync(fullPath);
+        const dims = readPngDims(fullPath); // null for non-PNG (client falls back to measure-after-load)
         list.push({
           type: 'image',
           filename: f,
           url: `/outputs/images/${f}`,
           previewUrl: `/outputs/images/${f}`,
+          width: dims ? dims.w : null,
+          height: dims ? dims.h : null,
           size: (stat.size / 1024 / 1024).toFixed(2) + ' MB',
           createdAt: stat.mtime
         });
@@ -1420,43 +1470,69 @@ async function runGenerationJob(taskId) {
   const stagedH3Name = `staged_${taskId}.png`;
   const dstStagedH3Path = path.join(COMFY_TEMP_INPUT_DIR, stagedH3Name);
 
+  // Shared generation canvas for both stages (services/imagegen re-derives it internally for the krea path)
+  let canvas = ASPECT_CANVAS[task.aspect_ratio] || ASPECT_CANVAS['3:4'];
+
   try {
     // -------------------------------------------------------------
     // STAGE 1: Reference Still Image Generation (~20s)
     // Supports Krea-2 (ComfyUI) or GPT Image 2 (OpenAI)
     // -------------------------------------------------------------
     task.status = 'running';
-    task.progress = 10;
-    const engineLabel = task.still_engine === 'gpt_image_2' ? 'GPT Image 2' : 'Krea-2';
-    const modelTag = task.model_image ? ' · 指定模特主角' : ` · ${MODEL_STYLES[task.model_style].name}`;
-    task.message = `[阶段一] 正在生成模特试衣定妆照 (${sceneDisplayName}${modelTag} · ${engineLabel})...`;
 
-    const stillResult = await generateReferenceImage({
-      engine: task.still_engine || 'krea2',
-      task,
-      taskId,
-      prompt: finalKreaPrompt,
-      onProgress: (progress, message) => {
-        task.progress = progress;
-        task.message = message;
-      },
-      context: {
-        projectInputDir: PROJECT_INPUT_DIR,
-        projectImageDir: PROJECT_IMAGE_DIR,
-        comfyTempInputDir: COMFY_TEMP_INPUT_DIR,
-        comfyOutputDir: COMFY_OUTPUT_DIR,
-        workflowsDir: WORKFLOWS_DIR,
-        aspectCanvas: ASPECT_CANVAS,
-        randomSeed,
-        detectFlatlayScoreSync,
-        requireNodes,
-        submitComfyWorkflow: submitComfyWorkflowWithProgress
+    let stillResult;
+    if (task.existing_still) {
+      // Skip Stage 1 entirely: the user picked an existing still photo.
+      const stillAbsPath = path.join(PROJECT_IMAGE_DIR, task.existing_still);
+      if (!fs.existsSync(stillAbsPath)) {
+        throw new Error(`找不到指定的定妆照: ${task.existing_still}`);
       }
-    });
+      // Derive the video canvas from the still's real aspect ratio so the
+      // H3 workflow matches the image instead of the UI's stale selection.
+      const dims = readPngDims(stillAbsPath);
+      const derivedKey = dims ? nearestCanvasKey(dims.w, dims.h) : null;
+      if (derivedKey && ASPECT_CANVAS[derivedKey]) {
+        canvas = ASPECT_CANVAS[derivedKey];
+      }
+      task.stillImage = `/outputs/images/${task.existing_still}`;
+      stillResult = { destPath: stillAbsPath, webUrl: task.stillImage, filename: task.existing_still };
+      task.progress = 38;
+      task.message = `使用现有定妆照，跳过阶段一，按 ${canvas.width}x${canvas.height} 画布进入视频阶段...`;
+    } else {
+      task.progress = 10;
+      const engineLabel = task.still_engine === 'gpt_image_2' ? 'GPT Image 2' : 'Krea-2';
+      const modelTag = task.model_image
+        ? ' · 指定模特主角'
+        : ` · ${MODEL_STYLES[task.model_style].name} · ${(HAIRSTYLES[task.hair_style] || HAIRSTYLES.natural).name} · ${(FACE_SHAPES[task.face_shape] || FACE_SHAPES.oval).name}`;
+      task.message = `[阶段一] 正在生成模特试衣定妆照 (${sceneDisplayName}${modelTag} · ${engineLabel})...`;
 
-    task.stillImage = stillResult.webUrl;
+      stillResult = await generateReferenceImage({
+        engine: task.still_engine || 'krea2',
+        task,
+        taskId,
+        prompt: finalKreaPrompt,
+        onProgress: (progress, message) => {
+          task.progress = progress;
+          task.message = message;
+        },
+        context: {
+          projectInputDir: PROJECT_INPUT_DIR,
+          projectImageDir: PROJECT_IMAGE_DIR,
+          comfyTempInputDir: COMFY_TEMP_INPUT_DIR,
+          comfyOutputDir: COMFY_OUTPUT_DIR,
+          workflowsDir: WORKFLOWS_DIR,
+          aspectCanvas: ASPECT_CANVAS,
+          randomSeed,
+          detectFlatlayScoreSync,
+          requireNodes,
+          submitComfyWorkflow: submitComfyWorkflowWithProgress
+        }
+      });
+
+      task.stillImage = stillResult.webUrl;
+    }
     task.progress = 40;
-    task.message = '阶段一完成，定妆照已生成。';
+    task.message = task.existing_still ? '已载入现有定妆照，跳过阶段一。' : '阶段一完成，定妆照已生成。';
 
     // Stage 1 only mode early exit
     if (task.mode === 'still_only') {
@@ -1470,7 +1546,9 @@ async function runGenerationJob(taskId) {
     // STAGE 2: MiniMax H3 10-Second Extension (~180s)
     // -------------------------------------------------------------
     task.progress = 45;
-    const segActionNames = `${H3_ACTIONS[autoPrompts.actions.seg1].name} → ${H3_ACTIONS[autoPrompts.actions.seg2].name}`;
+    const seg1ActionName = H3_ACTIONS[autoPrompts.actions.seg1].name;
+    const seg2ActionName = H3_ACTIONS[autoPrompts.actions.seg2].name;
+    const segActionNames = `${seg1ActionName} → ${seg2ActionName}`;
     task.message = `[阶段二] 正在加载视频生成模型（${segActionNames}）...`;
 
     // Stage still image into ComfyUI temp input for MiniMax H3 (conforming dimensions if necessary)
@@ -1505,10 +1583,10 @@ async function runGenerationJob(taskId) {
         // Node 53 is segment 1 (8 steps); Node 86 is segment 2 (8 steps)
         if (ev.node === '53') {
           task.progress = Math.min(68, Math.round(45 + (ev.value / ev.max) * 23));
-          task.message = `[阶段二] 分镜一渲染中：迎面走姿 (采样 ${ev.value}/${ev.max})...`;
+          task.message = `[阶段二] 分镜一渲染中：${seg1ActionName} (采样 ${ev.value}/${ev.max})...`;
         } else if (ev.node === '86') {
           task.progress = Math.min(92, Math.round(70 + (ev.value / ev.max) * 22));
-          task.message = `[阶段二] 分镜二渲染中：45°转体特写 (采样 ${ev.value}/${ev.max})...`;
+          task.message = `[阶段二] 分镜二渲染中：${seg2ActionName} (采样 ${ev.value}/${ev.max})...`;
         }
       } else if (ev.type === 'node_change') {
         if (ev.node === '89' || ev.node === '80') {
@@ -1570,11 +1648,10 @@ async function runGenerationJob(taskId) {
     // Start the idle timer only after the final ComfyUI workflow has settled.
     noteGenerationActivity();
 
-    // Thorough cleanup: Ensure NO temporary files are left behind inside ComfyUI directories
+    // Thorough cleanup: Ensure NO temporary files are left behind inside ComfyUI directories.
+    // Note: only dstStagedH3Path is a real variable — the taskId-scan below covers
+    // every other file this task produced in the temp/output directories.
     try {
-      if (dstTempInputPath && fs.existsSync(dstTempInputPath)) fs.unlinkSync(dstTempInputPath);
-      if (dstTempModelPath && fs.existsSync(dstTempModelPath)) fs.unlinkSync(dstTempModelPath);
-      if (dstTempScenePath && fs.existsSync(dstTempScenePath)) fs.unlinkSync(dstTempScenePath);
       if (dstStagedH3Path && fs.existsSync(dstStagedH3Path)) fs.unlinkSync(dstStagedH3Path);
       // Scan temp dir AND output root — all files this task produced carry the taskId
       for (const outDir of [COMFY_TEMP_OUTPUT_DIR, COMFY_OUTPUT_DIR]) {

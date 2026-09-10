@@ -87,11 +87,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const stillFrameWrapper = document.getElementById('stillFrameWrapper');
   const downloadStillBtn = document.getElementById('downloadStillBtn');
   const btnZoomStill = document.getElementById('btnZoomStill');
+  const btnStillToVideo = document.getElementById('btnStillToVideo');
 
   const videoBox = document.getElementById('videoBox');
   const resultVideo = document.getElementById('resultVideo');
   const btnToggleAudio = document.getElementById('btnToggleAudio');
   const downloadVideoBtn = document.getElementById('downloadVideoBtn');
+
+  // Result frames follow the media's true aspect ratio — a fixed 3/4 frame
+  // with object-fit: cover crops anything that is not exactly 3:4.
+  if (resultStillImg) {
+    resultStillImg.addEventListener('load', () => {
+      const frame = resultStillImg.closest('.image-frame');
+      if (frame && resultStillImg.naturalWidth && resultStillImg.naturalHeight) {
+        frame.style.aspectRatio = `${resultStillImg.naturalWidth} / ${resultStillImg.naturalHeight}`;
+      }
+    });
+  }
+  if (resultVideo) {
+    resultVideo.addEventListener('loadedmetadata', () => {
+      const frame = resultVideo.closest('.video-frame');
+      if (frame && resultVideo.videoWidth && resultVideo.videoHeight) {
+        frame.style.aspectRatio = `${resultVideo.videoWidth} / ${resultVideo.videoHeight}`;
+      }
+    });
+  }
 
   const historyGrid = document.getElementById('historyGrid');
   const btnRefreshHistory = document.getElementById('btnRefreshHistory');
@@ -493,8 +513,15 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
       const modelStyle = document.querySelector('input[name="modelStyle"]:checked')?.value || 'classic';
       const aspectRatio = document.querySelector('input[name="aspectRatio"]:checked')?.value || '3:4';
-      const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'krea2';
+      const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'gpt_image_2';
       const genMode = document.querySelector('input[name="genMode"]:checked')?.value || 'video';
+      // These used to be closure variables; after the refactor they live only in
+      // the DOM. Referencing the old names here threw a ReferenceError that the
+      // try/catch swallowed — silently breaking ALL option persistence.
+      const seg1Action = seg1ActionSelect ? seg1ActionSelect.value : DEFAULT_ACTIONS.seg1;
+      const seg2Action = seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2;
+      const hairStyle = document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural';
+      const faceShape = document.querySelector('input[name="faceShape"]:checked')?.value || 'oval';
       const customScene = customSceneText ? customSceneText.value : '';
       const customPrompt = customPromptInput ? customPromptInput.value : '';
 
@@ -753,12 +780,19 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
   }
 
   function updateStillEngineUI() {
-    const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'krea2';
+    const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'gpt_image_2';
     const inspectorStage1Title = document.getElementById('inspectorStage1Title');
     if (inspectorStage1Title) {
       inspectorStage1Title.textContent = stillEngine === 'gpt_image_2'
         ? '阶段一：GPT Image 2 参考底图提示词'
         : '阶段一：Krea-2 试衣定妆照生图提示词';
+    }
+    // Progress-card pipeline step 2 must follow the selected still engine.
+    const step2Text = document.getElementById('step2Text');
+    if (step2Text) {
+      step2Text.textContent = stillEngine === 'gpt_image_2'
+        ? 'GPT Image 2 静态试衣定型（主角融合与服装上身）'
+        : 'Krea-2 静态试衣定型（主角融合与服装上身）';
     }
   }
 
@@ -1443,7 +1477,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
         return;
       }
 
-      const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'krea2';
+      const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'gpt_image_2';
       if (stillEngine === 'gpt_image_2') {
         if (!serverConfig) {
           await fetchServerConfig();
@@ -1554,6 +1588,9 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       if (!genRes.ok) throw new Error(genData.error || '启动生成任务失败');
 
       currentTaskId = genData.taskId;
+      // Restore the engine label on step 2 (a previous existing-still run may
+      // have relabeled it to 载入现有定妆照).
+      if (typeof updateStillEngineUI === 'function') updateStillEngineUI();
       try {
         sessionStorage.setItem(ACTIVE_TASK_KEY, JSON.stringify({
           taskId: currentTaskId,
@@ -1568,6 +1605,102 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     }
   });
 
+  // Generate a 10s video directly from an existing still photo (skips Stage 1).
+  // Scene / action / model options follow the current panel settings; the video
+  // canvas is derived server-side from the still's real aspect ratio.
+  async function generateVideoFromExistingStill(filename) {
+    if (!filename) return;
+    if (!window.confirm(`使用定妆照「${filename}」直接生成 10 秒展示视频?\n将跳过阶段一，场景与动作按当前面板设置执行。`)) return;
+    try {
+      setButtonsDisabled(true);
+      stopActiveVideoPlayback();
+      if (batchNavBar) batchNavBar.style.display = 'none';
+
+      const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
+      const modelStyle = document.querySelector('input[name="modelStyle"]:checked')?.value || 'classic';
+      const modelStylePrompt = modelStylePromptInput ? modelStylePromptInput.value.trim() : '';
+      const aspectRatio = document.querySelector('input[name="aspectRatio"]:checked')?.value || '3:4';
+      const customPrompt = customPromptInput ? customPromptInput.value.trim() : '';
+      const customScene = customSceneText ? customSceneText.value.trim() : '';
+      const sceneValue = (typeof selectedScene !== 'undefined' && selectedScene) ? selectedScene : 'street';
+
+      // Reset showcase view
+      showcaseEmpty.style.display = 'block';
+      showcaseContent.style.display = 'none';
+      const emptyH3 = showcaseEmpty.querySelector('h3');
+      const emptyP = showcaseEmpty.querySelector('p');
+      if (emptyH3) emptyH3.textContent = '展示视频生成中...';
+      if (emptyP) emptyP.textContent = '正在基于现有定妆照合成动态展示视频';
+
+      progressCard.style.display = 'block';
+      if (progressCardTitle) progressCardTitle.textContent = '现有定妆照 → 视频生成进度';
+      progressBar.style.width = '38%';
+      progressStatusMsg.textContent = '任务已提交，正在排队...';
+      startTimer();
+      scrollToProgress();
+
+      const { seg1Diff, seg2Diff } = getPromptInspectorDiffs();
+
+      const genRes = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: selectedImage || null,
+          model_image: null,
+          scene_image: null,
+          scene: sceneValue,
+          custom_scene: sceneValue === 'custom' ? customScene : '',
+          gender,
+          model_style: modelStyle,
+          model_style_prompt: modelStylePrompt,
+          custom_prompt: customPrompt,
+          aspect_ratio: aspectRatio,
+          mode: 'video',
+          still_engine: 'gpt_image_2',
+          existing_still: filename,
+          krea_prompt: null,
+          seg1_prompt: seg1Diff ? inspectorSeg1Prompt.value.trim() : null,
+          seg2_prompt: seg2Diff ? inspectorSeg2Prompt.value.trim() : null,
+          action1: seg1ActionSelect ? seg1ActionSelect.value : DEFAULT_ACTIONS.seg1,
+          action2: seg2ActionSelect ? seg2ActionSelect.value : DEFAULT_ACTIONS.seg2,
+          hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
+          face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval'
+        })
+      });
+      let genData;
+      try {
+        genData = await genRes.json();
+      } catch (jsonErr) {
+        throw new Error(`服务器响应异常 (${genRes.status})`);
+      }
+      if (!genRes.ok) throw new Error(genData.error || '启动生成任务失败');
+
+      currentTaskId = genData.taskId;
+      // Stage 1 is skipped for existing stills — relabel the step so the
+      // progress list does not claim an engine ran when it did not.
+      const step2TextEl = document.getElementById('step2Text');
+      if (step2TextEl) step2TextEl.textContent = '载入现有定妆照';
+      try {
+        sessionStorage.setItem(ACTIVE_TASK_KEY, JSON.stringify({
+          taskId: currentTaskId,
+          startTime: startTime || Date.now()
+        }));
+      } catch (e) {}
+      startPolling(currentTaskId);
+    } catch (err) {
+      showToast('发生错误: ' + err.message, true);
+      setButtonsDisabled(false);
+      stopTimer();
+    }
+  }
+
+  if (btnStillToVideo) {
+    btnStillToVideo.addEventListener('click', () => {
+      const filename = btnStillToVideo.dataset.filename || (resultStillImg.getAttribute('src') || '').split('/').pop();
+      if (filename) generateVideoFromExistingStill(filename);
+    });
+  }
+
   // 5. Batch Generate Execution (3 commercial styles: street + studio + boutique)
   if (btnGenerateBatch) {
     btnGenerateBatch.addEventListener('click', async () => {
@@ -1579,7 +1712,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
           return;
         }
 
-        const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'krea2';
+        const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'gpt_image_2';
         if (stillEngine === 'gpt_image_2') {
           if (!serverConfig) {
             await fetchServerConfig();
@@ -2110,6 +2243,15 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     } else {
       videoBox.style.display = 'none';
     }
+
+    // Offer "generate video from this still" whenever a still is shown without a video
+    if (btnStillToVideo) {
+      const showStillToVideo = Boolean(task.stillImage && !task.videoUrl);
+      btnStillToVideo.style.display = showStillToVideo ? 'inline-flex' : 'none';
+      if (showStillToVideo) {
+        btnStillToVideo.dataset.filename = task.stillImage.split('/').pop();
+      }
+    }
   }
 
   // Audio Toggle & Sync
@@ -2156,6 +2298,29 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
   });
 
   // 5. Load History (Supports both Videos and Stage 1 Still Photos)
+  // 小红书式瀑布流: grid rows are 2px units; each card spans enough rows to fit
+  // its natural height + 12px spacing, so variable-ratio thumbs pack tightly.
+  let masonryRaf = 0;
+  function layoutHistoryMasonry() {
+    const cards = Array.from(historyGrid.querySelectorAll('.history-card'));
+    if (!cards.length) return;
+    // Batch all reads before any writes: interleaving offsetHeight reads with
+    // gridRowEnd writes would force a sync reflow per card (layout thrashing).
+    // Heights are span-independent (align-items: start, fixed column width).
+    const spans = cards.map(card => Math.max(1, Math.ceil((card.offsetHeight + 12) / 2)));
+    cards.forEach((card, i) => {
+      card.style.gridRowEnd = `span ${spans[i]}`;
+    });
+  }
+  function scheduleHistoryMasonry() {
+    if (masonryRaf) cancelAnimationFrame(masonryRaf);
+    masonryRaf = requestAnimationFrame(() => {
+      masonryRaf = 0;
+      layoutHistoryMasonry();
+    });
+  }
+  window.addEventListener('resize', scheduleHistoryMasonry);
+
   async function loadHistory() {
     try {
       const res = await fetch('/api/history');
@@ -2163,6 +2328,9 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       historyGrid.innerHTML = '';
 
       if (items.length === 0) {
+        // Inline 'auto' (not '') — '' would fall back to the CSS 2px unit and
+        // collapse the empty-state paragraph.
+        historyGrid.style.gridAutoRows = 'auto';
         historyGrid.innerHTML = '<p style="color: var(--text-muted); font-size: 12px;">暂无历史生成记录</p>';
         return;
       }
@@ -2171,14 +2339,20 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
         const isVideo = item.type === 'video';
         const card = document.createElement('div');
         card.className = 'history-card';
+        // With known dimensions, reserve the thumb box via aspect-ratio before
+        // the image loads — the masonry spans are correct on the first pass.
+        const thumbDims = (item.width > 0 && item.height > 0)
+          ? ` style="aspect-ratio: ${item.width} / ${item.height};"`
+          : '';
         card.innerHTML = `
-          ${item.previewUrl ? `<img class="history-thumb" src="${escapeHtml(item.previewUrl)}" alt="${escapeHtml(item.filename)}">` : `<div class="history-thumb history-thumb-empty"><i class="ph ph-film-strip"></i></div>`}
+          ${item.previewUrl ? `<img class="history-thumb" src="${escapeHtml(item.previewUrl)}" alt="${escapeHtml(item.filename)}"${thumbDims} loading="lazy" decoding="async">` : `<div class="history-thumb history-thumb-empty"><i class="ph ph-film-strip"></i></div>`}
           <button class="history-delete" type="button" title="删除此记录"><i class="ph ph-trash"></i></button>
           <div class="history-meta">
             <div class="history-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
             <div class="history-size">
               <span class="history-badge ${isVideo ? 'badge-video' : 'badge-image'}">${isVideo ? '10s 视频' : '定妆照'}</span>
               <span>${escapeHtml(item.size)}</span>
+              ${!isVideo ? `<button class="history-video-btn" type="button" title="用此定妆照直接生成 10 秒视频"><i class="ph ph-video-camera"></i> 生成视频</button>` : ''}
             </div>
           </div>
         `;
@@ -2194,12 +2368,18 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
             cardEl.remove();
             showToast('已删除');
             if (!historyGrid.querySelector('.history-card')) {
+              historyGrid.style.gridAutoRows = 'auto';
               historyGrid.innerHTML = '<p style="color: var(--text-muted); font-size: 12px;">暂无历史生成记录</p>';
             }
           } catch (e) {
             cardEl.classList.remove('history-deleting');
             showToast(e.message || '删除失败');
           }
+        });
+        const videoBtn = card.querySelector('.history-video-btn');
+        if (videoBtn) videoBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          generateVideoFromExistingStill(item.filename);
         });
         card.addEventListener('click', () => {
           showcaseEmpty.style.display = 'none';
@@ -2222,6 +2402,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
               downloadStillBtn.href = item.previewUrl;
               downloadStillBtn.download = item.previewUrl.split('/').pop();
             }
+            if (btnStillToVideo) btnStillToVideo.style.display = 'none';
           } else {
             // Still image item
             stopActiveVideoPlayback();
@@ -2229,11 +2410,26 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
             resultStillImg.src = item.url;
             downloadStillBtn.href = item.url;
             downloadStillBtn.download = item.filename;
+            if (btnStillToVideo) {
+              btnStillToVideo.style.display = 'inline-flex';
+              btnStillToVideo.dataset.filename = item.filename;
+            }
           }
           showToast(`已加载历史作品: ${item.filename}`);
         });
         historyGrid.appendChild(card);
       });
+
+      // Relayout as thumbnails finish loading — only needed for thumbs without
+      // server-provided dimensions (those already reserve their box, so their
+      // spans are final and loading them is layout-neutral).
+      historyGrid.querySelectorAll('img.history-thumb').forEach(img => {
+        if (img.style.aspectRatio) return;
+        if (img.complete && img.naturalHeight > 0) return;
+        img.addEventListener('load', scheduleHistoryMasonry, { once: true });
+        img.addEventListener('error', scheduleHistoryMasonry, { once: true });
+      });
+      scheduleHistoryMasonry();
     } catch (e) {
       console.error('Failed to load history:', e);
     }
@@ -2341,8 +2537,8 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
 
   // App Initialization Sequence: sync actions -> restore options -> sync styles -> load scene cards -> check in-flight tasks -> load history
   (async () => {
-    if (seg1ActionSelect) seg1ActionSelect.addEventListener('change', saveUserOptions);
-    if (seg2ActionSelect) seg2ActionSelect.addEventListener('change', saveUserOptions);
+    if (seg1ActionSelect) seg1ActionSelect.addEventListener('change', () => { saveUserOptions(); queueRefreshPromptInspector(); });
+    if (seg2ActionSelect) seg2ActionSelect.addEventListener('change', () => { saveUserOptions(); queueRefreshPromptInspector(); });
     await fetchServerConfig();
     await syncActionsFromServer();
     await restoreUserOptions();

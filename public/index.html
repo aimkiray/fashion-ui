@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Fashion Studio | 服装动态展示视频生成</title>
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -334,11 +334,11 @@
             </div>
             <div class="radio-pills">
               <label class="pill-label">
-                <input type="radio" name="stillEngine" value="krea2" checked>
+                <input type="radio" name="stillEngine" value="krea2">
                 <span><i class="ph ph-cpu"></i> Krea-2 (本地显卡)</span>
               </label>
               <label class="pill-label">
-                <input type="radio" name="stillEngine" value="gpt_image_2">
+                <input type="radio" name="stillEngine" value="gpt_image_2" checked>
                 <span><i class="ph ph-sparkle"></i> GPT Image 2 (OpenAI)</span>
               </label>
             </div>
@@ -509,7 +509,7 @@
             </div>
             <div class="step-item" id="step2">
               <span class="step-indicator">2</span>
-              <span class="step-text">Krea-2 静态试衣定型（主角融合与服装上身）</span>
+              <span class="step-text" id="step2Text">Krea-2 静态试衣定型（主角融合与服装上身）</span>
             </div>
             <div class="step-item" id="step3">
               <span class="step-indicator">3</span>
@@ -559,6 +559,7 @@
                   <span>阶段一：模特试衣定妆照</span>
                   <div class="box-actions">
                     <button class="btn-tool-link" id="btnZoomStill"><i class="ph ph-magnifying-glass-plus"></i> 放大</button>
+                    <button class="btn-tool-link" id="btnStillToVideo" style="display: none;"><i class="ph ph-video-camera"></i> 用此图生成视频</button>
                     <a class="btn-download-link" id="downloadStillBtn" target="_blank" download>下载图片</a>
                   </div>
                 </div>
@@ -645,7 +646,8 @@
             <label for="cfgQuality">图像质量</label>
             <select id="cfgQuality" class="select-field">
               <option value="high" selected>high (高画质)</option>
-              <option value="standard">standard (标准)</option>
+              <option value="medium">medium (均衡)</option>
+              <option value="low">low (快速)</option>
             </select>
           </div>
         </div>
