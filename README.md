@@ -106,6 +106,19 @@ fashion_ui/
 - `storage/`（用户上传的服装图、生成的定妆照与视频）、`config.json`、`.env` 均已在 `.gitignore` 中排除，**不会进入仓库与 git 历史**；
 - API Key 仅保存在本地，请勿将 `.env` / `config.json` 提交到任何公开位置；若不慎泄露请立即在服务商后台轮换。
 
+## 分离部署（应用与 ComfyUI 分机）
+
+当 Web 应用与 ComfyUI 运行在不同机器时（例如应用在 Mac、ComfyUI 在 Windows GPU 主机），在应用侧 `.env` 中设置：
+
+```bash
+COMFY_URL=http://<comfyui-host>:8188
+COMFY_REMOTE=1
+```
+
+- 工作流输入经 `POST /upload/image` 暂存，成片经 `GET /view` 取回，全程 HTTP，无需共享文件系统；
+- ComfyUI 主机需以 `--listen 0.0.0.0` 启动；
+- ComfyUI 没有删除 API，暂存文件会累积在其 `input/online_temp` 与 `output/online_temp` 中，请偶尔手动清理。
+
 ## License
 
 MIT
