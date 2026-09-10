@@ -270,6 +270,28 @@ test('environment props (bench / display window) are injected into the still and
   assert.ok(keep.seg1_prompt.includes('场景物件（长椅或玻璃橱窗）保持自然稳定'));
 });
 
+test('Composition section exists across all scenes and all three reference paths', () => {
+  // 锁定：Composition 分节不得在后续重构中悄悄丢失（gptImage2 需求层的
+  // 'framed per the Composition section' 引用依赖它的存在）
+  for (const scene of ['street', 'studio', 'office', 'boutique', 'outdoor', 'cafe', 'custom']) {
+    const p = computeTaskPrompts({ scene });
+    assert.ok(p.krea_prompt.includes('Composition: rule-of-thirds framing'), `${scene}: catalog path missing Composition`);
+    assert.ok(p.krea_prompt.indexOf('Composition: rule-of-thirds framing') < p.krea_prompt.indexOf('Outfit:'), `${scene}: Composition must precede Outfit`);
+
+    const mi = computeTaskPrompts({ scene, model_image: 'm.png' });
+    assert.ok(mi.krea_prompt.includes('Composition: rule-of-thirds framing'), `${scene}: model_image path missing Composition`);
+
+    const si = computeTaskPrompts({ scene, scene_image: 's.png' });
+    assert.ok(si.krea_prompt.includes('Composition: rule-of-thirds framing'), `${scene}: scene_image path missing Composition`);
+  }
+  // 侧向稳定性：同配置重复组装侧向不变；三种参考模式间侧向一致
+  const base = computeTaskPrompts({ scene: 'street', gender: 'female' });
+  const sideOf = (t) => /the (left|right) third line/.exec(t)[1];
+  assert.equal(sideOf(computeTaskPrompts({ scene: 'street', gender: 'female' }).krea_prompt), sideOf(base.krea_prompt));
+  assert.equal(sideOf(computeTaskPrompts({ scene: 'street', gender: 'female', model_image: 'm.png' }).krea_prompt), sideOf(base.krea_prompt));
+  assert.equal(sideOf(computeTaskPrompts({ scene: 'street', gender: 'female', scene_image: 's.png' }).krea_prompt), sideOf(base.krea_prompt));
+});
+
 test('computeTaskPrompts injects props into Stage 1 and adapts kid posture', () => {
   const { resolveActions } = require('../../src/prompts/computeTaskPrompts');
   const coffeeOut = computeTaskPrompts({ scene: 'street', action1: 'coffee_sip', action2: 'walk' });

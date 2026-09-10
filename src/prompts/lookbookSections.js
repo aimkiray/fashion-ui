@@ -28,8 +28,8 @@ function buildLookbookPrompt({ subj, pro, scene, pose, gaze, light, lens, ageKey
   const sections = [
     `Scene: ${scene}.`,
     `Subject: ${subj}. ${subject} stands full-length in frame facing forward toward the camera — entire figure visible head-to-toe with complete footwear, front of the outfit and full face clearly visible to the viewer, camera at chest height relative to the subject and far enough back that nothing is cropped.`,
-    `Outfit: change only the clothing. ${GARMENT_PRESERVE} ${GARMENT_COMBINE}`,
     `Composition: ${composition}`,
+    `Outfit: change only the clothing. ${GARMENT_PRESERVE} ${GARMENT_COMBINE}`,
     `Pose & gaze: ${poseText} ${gaze} The model is facing the camera in a front or flattering three-quarter front view, never with the back turned to the camera.`,
     `Light & color: ${light} Keep garment, skin, and background colors faithful to the reference garment and the environment; no heavy yellow or orange cast.`,
     `Style: Photorealistic real photograph, honest and unposed, with real skin texture, visible pores, and natural color. No glamorization, no heavy retouching. Shot like a film photograph with subtle organic film grain${lens ? `, ${lens}` : ''}.`,
