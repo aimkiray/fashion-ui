@@ -12,7 +12,7 @@ const { runPythonScript } = require('../../src/images/pythonBin');
 // image-prompting guide: state exclusions and preservation explicitly). Kept
 // size-agnostic - orientation is controlled by the size parameter, not words.
 const OPENAI_IMAGE_OUTPUT_REQUIREMENTS =
-  'Output requirements: photorealistic result, preserve the exact clothing design, silhouette, fabric drape, and colors from the reference garment as faithfully as possible, with realistic human anatomy and grounded posture. Full body visible including footwear. Composition: keep clear headroom — at least 12% of the frame height of empty space above the hair — and keep the entire figure inside the frame with margin below the feet, so nothing is ever clipped. Model must face forward toward the camera in a front or flattering three-quarter front view with full face and front of the outfit clearly visible; strictly no back views, never back turned to camera, no facing away from camera. No text, no watermarks, no logos.';
+  'Output requirements: photorealistic result, preserve the exact clothing design, silhouette, fabric drape, and colors from the reference garment as faithfully as possible, with realistic human anatomy and grounded posture. Full body visible including footwear, framed per the Composition section of the prompt. Model must face forward toward the camera in a front or flattering three-quarter front view with full face and front of the outfit clearly visible; strictly no back views, never back turned to camera, no facing away from camera. No text, no watermarks, no logos.';
 
 // Image generation through budget relays can legitimately take several minutes
 // (queued cheap channels + quality:high). 3 min was too tight and caused

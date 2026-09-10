@@ -1,5 +1,6 @@
 const { styledSubject } = require("../prompts/styledSubject");
 const { buildLookbookPrompt } = require("../prompts/lookbookSections");
+const { buildCompositionInstructions } = require("../prompts/composition");
 
 // Each scene provides its flavor strings; the shared builder assembles the
 // labeled sections recommended by the official image-prompting guide.
@@ -17,11 +18,13 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian female editorial model', 'stylish East Asian male editorial model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
+      const composition = buildCompositionInstructions(`street:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
           pro,
           ageKey,
+          composition,
           scene: 'a sunlit city street sidewalk with historic brownstone buildings',
           pose: 'Relaxed editorial stance facing forward toward the camera, subtle natural weight shift to one hip, shoulders soft and open, front of the outfit and full face clearly visible to the viewer, waistline and long legs forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
           gaze: 'Direct eye contact with the viewer, head in a gentle three-quarter turn, gaze connecting naturally.',
@@ -43,11 +46,13 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'professional East Asian female model', 'professional East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
+      const composition = buildCompositionInstructions(`studio:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
           pro,
           ageKey,
+          composition,
           scene: 'a clean minimalist studio against a neutral grey cyclorama backdrop',
           pose: 'Elegant upright posture facing forward in a clean three-quarter front angle toward the camera, shoulders soft and open, front of the outfit and full face clearly visible to the viewer, waistline forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
           gaze: 'Direct eye contact with the viewer, slightly lowered chin with eyes lifted toward the lens, a quiet intimate gaze.',
@@ -69,11 +74,13 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'chic East Asian professional female model', 'chic East Asian professional male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
+      const composition = buildCompositionInstructions(`office:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
           pro,
           ageKey,
+          composition,
           scene: 'the quiet morning lobby of a modern glass corporate skyscraper with polished granite floors',
           pose: 'Composed executive stance facing forward toward the camera, posture relaxed but intentional, shoulders soft and open, front of the outfit and full face clearly visible to the viewer, waistline visible beneath tailored garments, long legs forming clean lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
           gaze: 'Calm three-quarter front eye contact with confident professional warmth, head turned just enough to show the jawline.',
@@ -95,11 +102,13 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'graceful East Asian female fashion model', 'graceful East Asian male fashion model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
+      const composition = buildCompositionInstructions(`boutique:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
           pro,
           ageKey,
+          composition,
           scene: 'a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures',
           pose: 'Graceful weight on one leg facing forward toward the camera, torso softly angled in a front-facing posture, shoulders and waistline forming refined elegant lines, front of the outfit and full face clearly visible to the viewer, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
           gaze: 'Gaze meeting the camera levelly with warm spotlight catchlights in the eyes, composed direct eye contact with the viewer.',
@@ -121,11 +130,13 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'natural East Asian female model', 'natural East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
+      const composition = buildCompositionInstructions(`outdoor:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
           pro,
           ageKey,
+          composition,
           scene: 'a quiet tree-lined park path with uneven weathered stone pavers, mature green foliage and low hedges, a few scattered fallen leaves on the ground',
           pose: 'Peaceful relaxed stance facing forward toward the camera beside natural park greenery, posture fluid and natural, shoulders soft and open, front of the outfit and full face clearly visible to the viewer, waistline visible, long legs forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
           gaze: 'Gentle three-quarter front eye contact with the viewer, face turned toward the camera, warm engaging gaze, face angle natural and alive.',
@@ -147,11 +158,13 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian female model', 'stylish East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
+      const composition = buildCompositionInstructions(`cafe:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
           pro,
           ageKey,
+          composition,
           scene: 'a cozy modern cafe with warm timber oak interiors, simple wooden tables and chairs, and large floor-to-ceiling windows',
           pose: 'Casual editorial stance facing forward near the window, body language relaxed but intentional, shoulders soft and open, front of the outfit and full face clearly visible to the viewer, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
           gaze: 'Chin softly lifted, head turned in a three-quarter front view toward the lens, warm approachable eye contact.',
@@ -177,11 +190,13 @@ const SCENES = {
       const sceneDesc = /^(in|on|at|against|under|near|along)\b/i.test(rawScene)
         ? rawScene.replace(/^(In|On|At|Against|Under|Near|Along)\b/, (m) => m.toLowerCase())
         : `in ${rawScene}`;
+      const composition = buildCompositionInstructions(`custom:${gender}:${style}:${hairKey}:${faceKey}:${ageKey}`).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
           pro,
           ageKey,
+          composition,
           scene: sceneDesc,
           pose: 'Elegant confident posture facing forward toward the camera, body language relaxed but intentional, shoulders soft and open, front of the outfit and full face clearly visible to the viewer, waistline visible, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
           gaze: 'Soft direct eye contact with a warm genuine presence, face angle natural and alive.',

@@ -19,7 +19,7 @@ const GARMENT_COMBINE =
 const ARMS_NEUTRAL =
   'Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.';
 
-function buildLookbookPrompt({ subj, pro, scene, pose, gaze, light, lens, ageKey, extra }) {
+function buildLookbookPrompt({ subj, pro, scene, pose, gaze, light, lens, ageKey, extra, composition }) {
   const isKid = ageKey === 'toddler' || ageKey === 'child';
   const subject = pro.charAt(0).toUpperCase() + pro.slice(1);
   const poseText = isKid
@@ -29,6 +29,7 @@ function buildLookbookPrompt({ subj, pro, scene, pose, gaze, light, lens, ageKey
     `Scene: ${scene}.`,
     `Subject: ${subj}. ${subject} stands full-length in frame facing forward toward the camera — entire figure visible head-to-toe with complete footwear, front of the outfit and full face clearly visible to the viewer, camera at chest height relative to the subject and far enough back that nothing is cropped.`,
     `Outfit: change only the clothing. ${GARMENT_PRESERVE} ${GARMENT_COMBINE}`,
+    `Composition: ${composition}`,
     `Pose & gaze: ${poseText} ${gaze} The model is facing the camera in a front or flattering three-quarter front view, never with the back turned to the camera.`,
     `Light & color: ${light} Keep garment, skin, and background colors faithful to the reference garment and the environment; no heavy yellow or orange cast.`,
     `Style: Photorealistic real photograph, honest and unposed, with real skin texture, visible pores, and natural color. No glamorization, no heavy retouching. Shot like a film photograph with subtle organic film grain${lens ? `, ${lens}` : ''}.`,
