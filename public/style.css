@@ -1795,6 +1795,16 @@ kbd {
   object-fit: cover;
 }
 
+/* 全屏时保持原始比例（letterbox），不拉伸铺满窗口 */
+video:fullscreen,
+video:-webkit-full-screen {
+  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  max-height: 100vh;
+  background: #000;
+}
+
 /* ============ History ============ */
 
 .history-section {
