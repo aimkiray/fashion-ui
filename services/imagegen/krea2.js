@@ -14,6 +14,7 @@ async function generateKrea2({
   task,
   taskId,
   prompt,
+  signal,
   projectInputDir,
   projectImageDir,
   comfyTempInputDir,
@@ -23,11 +24,13 @@ async function generateKrea2({
   workflowsDir,
   aspectCanvas,
   randomSeed,
-  detectFlatlayScoreSync,
+  detectFlatlayScore,
   requireNodes,
   submitComfyWorkflow,
   onProgress
 }) {
+  if (signal && signal.aborted) throw new Error('任务已被用户取消');
+
   const kreaWfPath = path.join(workflowsDir, 'krea2_outfit_transfer.json');
   if (!fs.existsSync(kreaWfPath)) {
     throw new Error('找不到 Krea-2 工作流模板文件 krea2_outfit_transfer.json');
@@ -56,7 +59,7 @@ async function generateKrea2({
   const tempSceneFile = task.scene_image ? `temp_scene_${taskId}_${path.basename(task.scene_image)}` : null;
 
   try {
-    const garmentAnalysis = detectFlatlayScoreSync(srcInputPath);
+    const garmentAnalysis = await detectFlatlayScore(srcInputPath);
     const isFlatlay = garmentAnalysis.flatlay_score >= 0.65;
     const garmentRefBoost = isFlatlay ? 0.94 : 0.96;
     if (garmentAnalysis.flatlay_score > 0) {
@@ -64,7 +67,7 @@ async function generateKrea2({
     }
 
     const kreaWf = JSON.parse(fs.readFileSync(kreaWfPath, 'utf-8'));
-    requireNodes(kreaWf, 'Krea-2', ['5', '7', '9', '11', '13']);
+    requireNodes(kreaWf, 'Krea-2', ['3', '5', '7', '8', '9', '11', '13']);
     kreaWf['5']['inputs']['image'] = stagedInputRef;
     kreaWf['9']['inputs']['prompt'] = prompt;
 
@@ -212,6 +215,11 @@ async function generateKrea2({
       try {
         if (fs.existsSync(srcStillPath)) fs.unlinkSync(srcStillPath);
       } catch (e) {}
+    }
+
+    if (!fs.existsSync(destStillPath) || fs.statSync(destStillPath).size < 512) {
+      try { if (fs.existsSync(destStillPath)) fs.unlinkSync(destStillPath); } catch (e) {}
+      throw new Error('Krea-2 试衣生成失败，导出的图像文件无效或损坏。');
     }
 
     if (typeof onProgress === 'function') {

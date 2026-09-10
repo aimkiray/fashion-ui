@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_FILE = path.join(__dirname, '..', 'config.json');
+function getConfigFile() {
+  return process.env.CONFIG_FILE || path.join(__dirname, '..', 'config.json');
+}
 const ENV_FILE = path.join(__dirname, '..', '.env');
 
 // Auto-load .env file if it exists
@@ -41,21 +43,45 @@ function manualLoadEnv() {
   } catch (e) {}
 }
 
-loadEnvFile();
-
 let persistedConfig = {};
-try {
-  if (fs.existsSync(CONFIG_FILE)) {
-    persistedConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+
+function loadPersistedConfig() {
+  const configFile = getConfigFile();
+  try {
+    if (fs.existsSync(configFile)) {
+      persistedConfig = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+      if (typeof persistedConfig.openaiApiKey === 'string' && persistedConfig.openaiApiKey.trim()) {
+        process.env.OPENAI_API_KEY = persistedConfig.openaiApiKey.trim();
+      }
+      if (typeof persistedConfig.openaiBaseUrl === 'string' && persistedConfig.openaiBaseUrl.trim()) {
+        process.env.OPENAI_BASE_URL = persistedConfig.openaiBaseUrl.trim();
+      }
+      if (typeof persistedConfig.openaiImageModel === 'string' && persistedConfig.openaiImageModel.trim()) {
+        process.env.OPENAI_IMAGE_MODEL = persistedConfig.openaiImageModel.trim();
+      }
+      if (typeof persistedConfig.openaiImageQuality === 'string' && persistedConfig.openaiImageQuality.trim()) {
+        process.env.OPENAI_IMAGE_QUALITY = persistedConfig.openaiImageQuality.trim();
+      }
+    } else {
+      persistedConfig = {};
+    }
+  } catch (e) {
+    console.warn('config.json parse error:', e);
+    persistedConfig = {};
   }
-} catch (e) {
-  persistedConfig = {};
 }
+
+loadEnvFile();
+loadPersistedConfig();
 
 function normalizeBaseUrl(url) {
   if (!url || typeof url !== 'string') return 'https://api.openai.com/v1';
   let clean = url.trim().replace(/\/+$/, '');
   if (!clean) return 'https://api.openai.com/v1';
+  // Security guard: ensure URL uses http:// or https:// protocol
+  if (!/^https?:\/\//i.test(clean)) {
+    clean = `https://${clean}`;
+  }
   if (!clean.endsWith('/v1')) {
     clean = `${clean}/v1`;
   }
@@ -63,13 +89,37 @@ function normalizeBaseUrl(url) {
 }
 
 function getRawConfig() {
+  const fileKey = (typeof persistedConfig.openaiApiKey === 'string') ? persistedConfig.openaiApiKey.trim() : '';
+  const envKey = (process.env.OPENAI_API_KEY || '').trim();
+  const apiKey = fileKey || envKey;
+
+  const fileBase = (typeof persistedConfig.openaiBaseUrl === 'string') ? persistedConfig.openaiBaseUrl.trim() : '';
+  const envBase = (process.env.OPENAI_BASE_URL || '').trim();
+  const baseUrl = fileBase || envBase;
+
+  const fileOrg = (typeof persistedConfig.openaiOrgId === 'string') ? persistedConfig.openaiOrgId.trim() : '';
+  const envOrg = (process.env.OPENAI_ORG_ID || '').trim();
+  const orgId = fileOrg || envOrg;
+
+  const fileProject = (typeof persistedConfig.openaiProjectId === 'string') ? persistedConfig.openaiProjectId.trim() : '';
+  const envProject = (process.env.OPENAI_PROJECT_ID || '').trim();
+  const projectId = fileProject || envProject;
+
+  const fileModel = (typeof persistedConfig.openaiImageModel === 'string') ? persistedConfig.openaiImageModel.trim() : '';
+  const envModel = (process.env.OPENAI_IMAGE_MODEL || '').trim();
+  const imageModel = fileModel || envModel || 'gpt-image-2';
+
+  const fileQuality = (typeof persistedConfig.openaiImageQuality === 'string') ? persistedConfig.openaiImageQuality.trim() : '';
+  const envQuality = (process.env.OPENAI_IMAGE_QUALITY || '').trim();
+  const imageQuality = fileQuality || envQuality || 'high';
+
   return {
-    openaiApiKey: (process.env.OPENAI_API_KEY || persistedConfig.openaiApiKey || '').trim(),
-    openaiBaseUrl: normalizeBaseUrl(process.env.OPENAI_BASE_URL || persistedConfig.openaiBaseUrl),
-    openaiOrgId: (process.env.OPENAI_ORG_ID || persistedConfig.openaiOrgId || '').trim(),
-    openaiProjectId: (process.env.OPENAI_PROJECT_ID || persistedConfig.openaiProjectId || '').trim(),
-    openaiImageModel: (process.env.OPENAI_IMAGE_MODEL || persistedConfig.openaiImageModel || 'gpt-image-2').trim(),
-    openaiImageQuality: (process.env.OPENAI_IMAGE_QUALITY || persistedConfig.openaiImageQuality || 'high').trim()
+    openaiApiKey: apiKey,
+    openaiBaseUrl: normalizeBaseUrl(baseUrl),
+    openaiOrgId: orgId,
+    openaiProjectId: projectId,
+    openaiImageModel: imageModel,
+    openaiImageQuality: imageQuality
   };
 }
 
@@ -95,7 +145,7 @@ function getSafeConfig() {
 }
 
 function saveConfig(newConfig) {
-  if (typeof newConfig.openaiApiKey === 'string' && newConfig.openaiApiKey.trim()) {
+  if (typeof newConfig.openaiApiKey === 'string') {
     persistedConfig.openaiApiKey = newConfig.openaiApiKey.trim();
     process.env.OPENAI_API_KEY = persistedConfig.openaiApiKey;
   }
@@ -105,6 +155,9 @@ function saveConfig(newConfig) {
   }
   if (typeof newConfig.openaiImageModel === 'string' && newConfig.openaiImageModel.trim()) {
     persistedConfig.openaiImageModel = newConfig.openaiImageModel.trim();
+    // Keep env in sync — .env pins OPENAI_IMAGE_MODEL at boot and env wins
+    // in getRawConfig, so sync process.env as well
+    process.env.OPENAI_IMAGE_MODEL = persistedConfig.openaiImageModel;
   }
   if (typeof newConfig.openaiImageQuality === 'string' && newConfig.openaiImageQuality.trim()) {
     persistedConfig.openaiImageQuality = newConfig.openaiImageQuality.trim();
@@ -113,10 +166,11 @@ function saveConfig(newConfig) {
     process.env.OPENAI_IMAGE_QUALITY = persistedConfig.openaiImageQuality;
   }
 
+  const configFile = getConfigFile();
   try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(persistedConfig, null, 2), 'utf-8');
+    fs.writeFileSync(configFile, JSON.stringify(persistedConfig, null, 2), 'utf-8');
   } catch (e) {
-    console.error('Failed to save config.json:', e);
+    console.error('Failed to save config file:', e);
   }
   return getSafeConfig();
 }
@@ -163,6 +217,12 @@ async function testOpenAiConnection(customApiKey, customBaseUrl) {
 }
 
 module.exports = {
+  loadEnv: loadEnvFile,
+  loadPersistedConfig,
+  reloadConfig: () => {
+    loadEnvFile();
+    loadPersistedConfig();
+  },
   getRawConfig,
   getSafeConfig,
   saveConfig,

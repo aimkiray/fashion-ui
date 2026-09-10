@@ -1,12 +1,13 @@
 {
-  "name": "fashion_ui",
+  "name": "ai-fashion-studio",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AI Fashion Studio - 商业级服装动态展示与试衣系统",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test tests/"
   },
-  "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {

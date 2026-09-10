@@ -17,3 +17,6 @@ __pycache__/
 config.json
 .env
 .env.local
+
+# Motion A/B/C test clips (local-only verification artifacts)
+public/motion_*.mp4
