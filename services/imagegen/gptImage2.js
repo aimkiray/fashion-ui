@@ -290,30 +290,34 @@ async function generateGptImage2({
   if (config.openaiOrgId) headers['OpenAI-Organization'] = config.openaiOrgId;
   if (config.openaiProjectId) headers['OpenAI-Project'] = config.openaiProjectId;
 
-  // Prepare input images with strict reference ordering:
-  // 1. If scene_image is present, the prompt specifies:
-  //    "background environment from the first reference image, wearing the exact clothing and outfit from the second reference image"
-  //    -> Image 1: Scene image, Image 2: Garment image
-  // 2. If model_image is present, the prompt specifies:
-  //    "Transfer the clothing and outfit from the first reference image onto the model in the second reference image"
-  //    -> Image 1: Garment image, Image 2: Model image
-  // 3. Otherwise:
-  //    -> Image 1: Garment image
+  // Prepare input images. Precedence MUST mirror computeTaskPrompts (model_image
+  // wins over scene_image) or the prompt's "first/second reference image" wording
+  // will not match the images actually sent:
+  // 1. model_image present -> prompt: "Transfer the clothing from the first
+  //    reference image onto the model in the second reference image"
+  //    -> Image 1: Garment, Image 2: Model (scene ref is dropped, its
+  //    environment is described in text by the prompt builder)
+  // 2. else scene_image present -> prompt: "background from the first reference
+  //    image, wearing the exact clothing from the second reference image"
+  //    -> Image 1: Scene, Image 2: Garment
+  // 3. otherwise -> Image 1: Garment
   const images = [];
   const garmentPath = path.join(projectInputDir, task.image);
 
-  if (task.scene_image) {
-    const scenePath = path.join(projectInputDir, task.scene_image);
-    if (fs.existsSync(scenePath)) {
-      images.push({ image_url: fileToDataUrl(scenePath) });
+  const requireRef = (label, refPath) => {
+    if (!fs.existsSync(refPath)) {
+      // 静默丢图会让双图 prompt 落到单图语义上，生成结果完全错误——宁可明确失败
+      throw new Error(`参考图文件缺失: ${label} (${refPath})`);
     }
-    images.push({ image_url: fileToDataUrl(garmentPath) });
-  } else if (task.model_image) {
-    images.push({ image_url: fileToDataUrl(garmentPath) });
-    const modelPath = path.join(projectInputDir, task.model_image);
-    if (fs.existsSync(modelPath)) {
-      images.push({ image_url: fileToDataUrl(modelPath) });
-    }
+    return { image_url: fileToDataUrl(refPath) };
+  };
+
+  if (task.model_image) {
+    images.push(requireRef('服装图', garmentPath));
+    images.push(requireRef('模特参考图', path.join(projectInputDir, task.model_image)));
+  } else if (task.scene_image) {
+    images.push(requireRef('场景参考图', path.join(projectInputDir, task.scene_image)));
+    images.push(requireRef('服装图', garmentPath));
   } else {
     images.push({ image_url: fileToDataUrl(garmentPath) });
   }

@@ -13,13 +13,14 @@ const { H3_ACTIONS } = require("../prompt-catalog/h3Actions");
 async function runStage2(task, taskId, canvas, stillResult, { finalSeg1Prompt, finalSeg2Prompt, autoPrompts, stagedH3Name, dstStagedH3Path, signal }) {
       if (signal && signal.aborted) throw new Error('任务已被用户取消');
       task.progress = 45;
+      const enhance = !!task.enhance;
+      const stageTag = enhance ? '阶段二·超清增强' : '阶段二';
       const seg1ActionName = (H3_ACTIONS[autoPrompts.actions?.seg1] || {}).name || '迎面走姿';
       const seg2ActionName = (H3_ACTIONS[autoPrompts.actions?.seg2] || {}).name || '定点造型';
       const segActionNames = `${seg1ActionName} → ${seg2ActionName}`;
-      task.message = `[阶段二] 正在加载视频生成模型（${segActionNames}）...`;
+      task.message = `[${stageTag}] 正在加载 MiniMax H3 视频模型，分镜动作：${segActionNames}...`;
 
       // Stage still image into ComfyUI temp input for MiniMax H3 (conforming dimensions if necessary)
-      const enhance = !!task.enhance;
       const h3WfPath = path.join(WORKFLOWS_DIR, enhance ? 'fashion_streetwear_10s_extend_hd.json' : 'fashion_streetwear_10s_extend.json');
       let stagedImageRef = `online_temp/${stagedH3Name}`;
       await conformImageToCanvas(stillResult.destPath, dstStagedH3Path, canvas.width, canvas.height);
@@ -222,7 +223,7 @@ async function runStage2(task, taskId, canvas, stillResult, { finalSeg1Prompt, f
       task.videoUrl = `/outputs/videos/${finalVideoFilename}`;
       task.status = 'completed';
       task.progress = 100;
-      task.message = '展示视频生成完成。';
+      task.message = enhance ? '展示视频生成完成（1080p 超清增强）。' : '展示视频生成完成。';
 }
 
 module.exports = { runStage2 };

@@ -41,9 +41,11 @@ async function runStage1(task, taskId, finalKreaPrompt, sceneDisplayName, { sign
   } else {
     task.progress = 10;
     const engineLabel = task.still_engine === 'gpt_image_2' ? 'GPT Image 2' : 'Krea-2';
-    const modelTag = task.model_image
-      ? ' · 指定模特主角'
-      : ` · ${(MODEL_STYLES[task.model_style] || MODEL_STYLES.classic).name} · ${(MODEL_AGES[task.model_age] || MODEL_AGES.adult || MODEL_AGES.prime).name} · ${(HAIRSTYLES[task.hair_style] || HAIRSTYLES.natural).name} · ${(FACE_SHAPES[task.face_shape] || FACE_SHAPES.oval).name}`;
+    const modelTag = task.model_image && task.scene_image
+      ? ' · 指定模特主角 + 场景参考'
+      : task.model_image
+        ? ' · 指定模特主角'
+        : ` · ${(MODEL_STYLES[task.model_style] || MODEL_STYLES.classic).name} · ${(MODEL_AGES[task.model_age] || MODEL_AGES.adult || MODEL_AGES.prime).name} · ${(HAIRSTYLES[task.hair_style] || HAIRSTYLES.natural).name} · ${(FACE_SHAPES[task.face_shape] || FACE_SHAPES.oval).name}`;
     task.message = `[阶段一] 正在生成模特试衣定妆照 (${sceneDisplayName}${modelTag} · ${engineLabel})...`;
 
     stillResult = await generateReferenceImage({
@@ -75,7 +77,8 @@ async function runStage1(task, taskId, finalKreaPrompt, sceneDisplayName, { sign
     task.stillImage = stillResult.webUrl;
   }
   task.progress = 40;
-  task.message = task.existing_still ? '已载入现有定妆照，跳过阶段一。' : '阶段一完成，定妆照已生成。';
+  // existing_still 已在 38% 阶段给出"进入视频阶段"的详细说明，避免重复文案
+  if (!task.existing_still) task.message = '阶段一完成，定妆照已生成。';
 
   // Stage 1 only mode early exit
   if (task.mode === 'still_only') {
