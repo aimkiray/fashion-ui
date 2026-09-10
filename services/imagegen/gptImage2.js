@@ -1,7 +1,12 @@
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+
+const execFileAsync = promisify(execFile);
 const { parseSseChunk } = require('./sse');
 const { getRawConfig } = require('../config');
+const { runPythonScript } = require('../../src/images/pythonBin');
 
 const OPENAI_IMAGE_OUTPUT_REQUIREMENTS =
   'Output requirements: portrait orientation, preserve the exact clothing design, silhouette, fabric drape, and colors from the reference garment as faithfully as possible, with realistic human anatomy and grounded posture.';
@@ -41,11 +46,14 @@ function isTimeoutErr(err) {
 
 // Stream attempt: cap time-to-first-byte so a hanging upstream fails within
 // STREAM_TTFB_TIMEOUT_MS; once headers arrive, arm the full total-time budget.
-async function fetchStreamWithTtfbCap(endpoint, options) {
+async function fetchStreamWithTtfbCap(endpoint, options = {}) {
   const ac = new AbortController();
   const ttfbTimer = setTimeout(() => ac.abort(), STREAM_TTFB_TIMEOUT_MS);
+  const combinedSignal = options.signal
+    ? AbortSignal.any([ac.signal, options.signal])
+    : ac.signal;
   try {
-    const response = await fetch(endpoint, { ...options, signal: ac.signal });
+    const response = await fetch(endpoint, { ...options, signal: combinedSignal });
     clearTimeout(ttfbTimer);
     // Headers arrived; SSE activity or the final image should follow. Keep a
     // generous total cap for slow-but-alive upstreams.
@@ -71,18 +79,23 @@ function fileToDataUrl(filePath) {
   return `data:${mime};base64,${b64}`;
 }
 
-// Map aspect ratio to sizes the upstream actually supports. gpt-image-2 only
-// accepts 1024x1024 / 1024x1536 / 1536x1024 — verified empirically: the relay
-// silently coerces anything else (864x1536, 1024x1360) to 1024x1536. The
-// selected aspect ratio is restored afterwards by crop_to_aspect.py.
-function mapAspectRatioToSize(aspectRatio) {
+// Request the EXACT video-canvas size from the upstream (e.g. 3:4 -> 832x1088,
+// 9:16 -> 704x1280, 1:1 -> 960x960). gpt-image-2 accepts arbitrary pixel sizes,
+// and the returned image may be off by a few pixels — fit_to_canvas.py then
+// trims the excess (head-protecting) and Lanczos-resizes to the exact canvas,
+// so no content-bearing crop is ever needed.
+function mapAspectRatioToSize(aspectRatio, aspectCanvas) {
+  const canvas = (aspectCanvas && (aspectCanvas[aspectRatio] || aspectCanvas['3:4'])) || null;
+  if (canvas && canvas.width > 0 && canvas.height > 0) {
+    return `${canvas.width}x${canvas.height}`;
+  }
   switch (aspectRatio) {
     case '1:1':
       return '1024x1024';
     case '9:16':
     case '3:4':
     default:
-      return '1024x1536'; // official portrait (2:3) — closest superset of both
+      return '1024x1536'; // fallback if canvas table is unavailable
   }
 }
 
@@ -166,7 +179,9 @@ async function relayOpenAiStream(stream, onProgress) {
             if (candidate) finalBase64 = candidate;
           } else if (eventType === 'error' || parsed.eventName === 'error') {
             const msg = payload.message || payload.error?.message || 'OpenAI stream error';
-            throw new Error(msg);
+            const streamErr = new Error(msg);
+            streamErr.isUpstreamStreamError = true;
+            throw streamErr;
           } else {
             const candidate = extractImageFromPayload(payload);
             if (candidate && !payload.partial) {
@@ -174,7 +189,7 @@ async function relayOpenAiStream(stream, onProgress) {
             }
           }
         } catch (err) {
-          if (err.message && (err.message.includes('OpenAI stream error') || err.message.includes('API'))) throw err;
+          if (err.isUpstreamStreamError) throw err;
           // Ignore non-fatal JSON parse error on non-json SSE lines
         }
       }
@@ -204,13 +219,19 @@ async function relayOpenAiStream(stream, onProgress) {
  * Returns the raw Response for 2xx and non-retryable 4xx so the caller can
  * decide how to degrade; throws the last error once all attempts are spent.
  */
-async function fetchWithRetry(requestFactory, { attempts = 3, backoffMs = [2000, 5000], label = 'GPT Image 2' } = {}) {
+async function fetchWithRetry(requestFactory, { attempts = 3, backoffMs = [2000, 5000], label = 'GPT Image 2', signal } = {}) {
   let lastErr = null;
   for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (signal && signal.aborted) {
+      throw new Error('任务已被用户取消');
+    }
     if (attempt > 1) {
       const wait = backoffMs[Math.min(attempt - 2, backoffMs.length - 1)] || 2000;
       console.warn(`[${label}] 第 ${attempt}/${attempts} 次尝试，等待 ${wait}ms 后重试...`);
       await sleep(wait);
+      if (signal && signal.aborted) {
+        throw new Error('任务已被用户取消');
+      }
     }
     try {
       const response = await requestFactory();
@@ -224,6 +245,9 @@ async function fetchWithRetry(requestFactory, { attempts = 3, backoffMs = [2000,
       console.warn(`[${label}] 可重试的 HTTP ${response.status}${detail ? ` (${detail})` : ''}`);
       lastErr = new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
     } catch (err) {
+      if (signal && signal.aborted) {
+        throw new Error('任务已被用户取消');
+      }
       console.warn(`[${label}] 请求失败: ${err.message}`);
       lastErr = err;
       // A hung upstream will hang again on retry — timeout means stop retrying.
@@ -241,10 +265,16 @@ async function generateGptImage2({
   task,
   taskId,
   prompt,
+  signal,
   projectInputDir,
   projectImageDir,
+  aspectCanvas,
   onProgress
 }) {
+  if (signal && signal.aborted) {
+    throw new Error('任务已被用户取消');
+  }
+
   const config = getRawConfig();
   if (!config.openaiApiKey) {
     throw new Error('未配置 OpenAI API Key。请在页面右上角点击「⚙️ 配置 API」或设置 OPENAI_API_KEY。');
@@ -288,7 +318,7 @@ async function generateGptImage2({
     images.push({ image_url: fileToDataUrl(garmentPath) });
   }
 
-  const imageSize = mapAspectRatioToSize(task.aspect_ratio);
+  const imageSize = mapAspectRatioToSize(task.aspect_ratio, aspectCanvas);
   const trimmedPrompt = prompt.trim();
   const fullPrompt = trimmedPrompt.includes('Output requirements:')
     ? trimmedPrompt
@@ -311,12 +341,16 @@ async function generateGptImage2({
 
   // Non-stream request with retries (3 attempts: 2s, 5s backoff; a hung
   // upstream aborts after the timeout instead of burning all attempts).
-  const requestNonStream = async () => fetchWithRetry(() => fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(nonStreamBody),
-    signal: AbortSignal.timeout(IMAGE_REQUEST_TIMEOUT_MS)
-  }), { attempts: 3, backoffMs: [2000, 5000] });
+  const requestNonStream = async (body = nonStreamBody) => {
+    const timeoutSignal = AbortSignal.timeout(IMAGE_REQUEST_TIMEOUT_MS);
+    const reqSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+    return fetchWithRetry(() => fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: reqSignal
+    }), { attempts: 3, backoffMs: [2000, 5000], signal });
+  };
 
   let response = null;
   let usedStream = false;
@@ -327,19 +361,42 @@ async function generateGptImage2({
   //    delivers image data on them, while non-stream returns the image in
   //    seconds. Stream is kept only as a fallback for stream-only channels.
   try {
-    response = await requestNonStream();
+    response = await requestNonStream(nonStreamBody);
   } catch (netErr) {
+    if (signal && signal.aborted) {
+      throw new Error('任务已被用户取消');
+    }
     nonStreamFailed = true;
     nonStreamErrMsg = netErr.message;
     console.warn(`[GPT Image 2] 非流式请求失败 (${netErr.message})，降级为流式请求...`);
   }
 
-  // 2) Non-stream explicitly rejected with 400/422 (some channels only
-  //    accept streaming) → one stream fallback attempt.
+  // 2) Non-stream explicitly rejected with 400/422.
   if (response && !response.ok && (response.status === 400 || response.status === 422)) {
     try { nonStreamErrMsg = (await response.json())?.error?.message || ''; } catch (e) {}
-    console.warn(`[GPT Image 2] 非流式请求返回 HTTP ${response.status} (${nonStreamErrMsg})，降级为流式请求...`);
-    nonStreamFailed = true;
+    // 2a) 上游不接受自定义画布尺寸（背后可能是只认官方枚举的模型）→ 用官方
+    //     尺寸重试一次；crop_to_canvas.py 的头部保护裁切（coerced 分支）负责
+    //     把比例修正回目标画布，闭环不切头。
+    if (response.status === 400 && /size/i.test(nonStreamErrMsg)) {
+      const officialSize = imageSize === '1024x1024' ? '1024x1024' : '1024x1536';
+      if (officialSize !== imageSize) {
+        console.warn(`[GPT Image 2] 上游拒绝 size=${imageSize} (${nonStreamErrMsg})，回退官方尺寸 ${officialSize} 重试...`);
+        try {
+          response = await requestNonStream({ ...nonStreamBody, size: officialSize });
+        } catch (retryErr) {
+          if (signal && signal.aborted) throw new Error('任务已被用户取消');
+          nonStreamFailed = true;
+          nonStreamErrMsg = retryErr.message;
+        }
+      }
+    }
+    // 2b) 仍有 400/422（部分渠道只接受流式）→ 一次流式回退。
+    if (response && !response.ok && (response.status === 400 || response.status === 422)) {
+      // 重试产生的 400 也要消费掉 body，避免错误文案停留在首次请求的过期原因
+      try { nonStreamErrMsg = (await response.json())?.error?.message || nonStreamErrMsg; } catch (e) {}
+      console.warn(`[GPT Image 2] 非流式请求返回 HTTP ${response.status} (${nonStreamErrMsg})，降级为流式请求...`);
+      nonStreamFailed = true;
+    }
   }
 
   if (nonStreamFailed) {
@@ -347,8 +404,9 @@ async function generateGptImage2({
       response = await fetchWithRetry(() => fetchStreamWithTtfbCap(endpoint, {
         method: 'POST',
         headers,
-        body: JSON.stringify(requestBody)
-      }), { attempts: 1 });
+        body: JSON.stringify(requestBody),
+        signal
+      }), { attempts: 1, signal });
       usedStream = true;
     } catch (streamErr) {
       if (response && !response.ok) {
@@ -375,6 +433,8 @@ async function generateGptImage2({
       base64Output = await relayOpenAiStream(response.body, onProgress);
     } catch (streamErr) {
       console.warn('[GPT Image 2] 流式解析中断:', streamErr.message);
+      // Upstream error events must surface, not fall through to the generic message
+      if (streamErr.isUpstreamStreamError) throw streamErr;
     }
     if (!base64Output) {
       console.warn('[GPT Image 2] 流式兜底响应未包含图像数据。');
@@ -393,15 +453,25 @@ async function generateGptImage2({
     throw new Error('GPT Image 2 未返回有效图像数据。');
   }
 
+  if (signal && signal.aborted) {
+    throw new Error('任务已被用户取消');
+  }
+
   // If base64Output is an HTTP URL, download it
   if (base64Output.startsWith('http://') || base64Output.startsWith('https://')) {
     if (typeof onProgress === 'function') {
       onProgress(35, '[GPT Image 2] 正在下载成片图像...');
     }
-    const imgRes = await fetch(base64Output, { signal: AbortSignal.timeout(30000) });
+    const timeoutSignal = AbortSignal.timeout(30000);
+    const imgSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+    const imgRes = await fetch(base64Output, { signal: imgSignal });
     if (!imgRes.ok) throw new Error(`成片图像下载失败 (HTTP ${imgRes.status})`);
     const arrayBuffer = await imgRes.arrayBuffer();
     base64Output = Buffer.from(arrayBuffer).toString('base64');
+  }
+
+  if (signal && signal.aborted) {
+    throw new Error('任务已被用户取消');
   }
 
   // Cleanly strip data:image/...;base64, prefix if present to avoid corrupting image bytes
@@ -417,21 +487,28 @@ async function generateGptImage2({
   const destPath = path.join(projectImageDir, savedFilename);
   fs.writeFileSync(destPath, imageBuffer);
 
-  // Restore the exact selected aspect ratio: the upstream coerced the size to
-  // its official set (e.g. portrait -> 1024x1536), so center-crop back to the
-  // user's choice. No upscale — only pixels are removed, never invented.
-  const ratioParts = String(task.aspect_ratio || '3:4').split(':');
-  const ratioW = parseInt(ratioParts[0], 10);
-  const ratioH = parseInt(ratioParts[1], 10);
-  if (ratioW > 0 && ratioH > 0) {
+  // Fit the returned image to the exact video canvas. The request already used
+  // the canvas size, so in the normal case this is a no-op copy; a few-px
+  // upstream drift is corrected by a head-protecting trim + Lanczos resize
+  // (crop_to_canvas.py). If the relay still coerces the size to its official
+  // set (e.g. portrait -> 1024x1536), the same script crops back to the canvas
+  // aspect with a head-protecting bias and a warning is logged.
+  const canvas = aspectCanvas[String(task.aspect_ratio || '3:4')] || aspectCanvas['3:4'];
+  const targetW = canvas ? String(canvas.width) : null;
+  const targetH = canvas ? String(canvas.height) : null;
+  if (targetW && targetH) {
     try {
-      require('child_process').execFileSync(
-        process.platform === 'win32' ? 'python' : 'python3',
-        [path.join(__dirname, '..', '..', 'crop_to_aspect.py'), destPath, destPath, String(ratioW), String(ratioH)],
-        { timeout: 10000 }
+      const fitResult = await runPythonScript(
+        path.join(__dirname, '..', '..', 'crop_to_canvas.py'),
+        [destPath, destPath, targetW, targetH],
+        { timeout: 15000 }
       );
-    } catch (cropErr) {
-      console.warn('[GPT Image 2] 按所选比例裁剪失败，保留上游原始尺寸:', cropErr.message);
+      // 脚本在 coerced/过度放大时向 stderr 发关键告警，不能静默丢弃
+      if (fitResult && fitResult.stderr && fitResult.stderr.trim()) {
+        console.warn('[GPT Image 2] crop_to_canvas:', fitResult.stderr.trim());
+      }
+    } catch (fitErr) {
+      console.warn('[GPT Image 2] 画布尺寸修正失败，保留上游原始尺寸:', fitErr.message);
     }
   }
 

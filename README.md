@@ -40,7 +40,18 @@ AI Fashion Studio 是一套面向服装电商、快时尚品牌与独立设计�
 - **ComfyUI** 运行于 `http://127.0.0.1:8188`，需已安装：
   - Krea-2 穿衣迁移工作流所需的自定义节点（见 `workflows/krea2_outfit_transfer.json`）
   - MiniMax H3 视频扩展工作流所需节点（见 `workflows/fashion_streetwear_10s_extend.json`）
-- **Python 3 + Pillow**：用于定妆照比例裁剪（`crop_to_aspect.py`）与视频首帧画布对齐（`resize_to_canvas.py`）
+- **Python 3 + Pillow + numpy**：用于定妆照画布适配（`crop_to_canvas.py`，头部保护式裁剪）与平铺图智能检测（`detect_flatlay.py`）
+  ```bash
+  pip install -r requirements.txt
+  ```
+- **PYTHON_BIN 环境变量（可选）**：图像适配脚本使用的 Python 解释器解析顺序为
+  `PYTHON_BIN` → `python`（win32）→ `python3`。Windows 生产环境由 `start.bat`
+  自动把 ComfyUI venv（`D:\Comfy\ComfyUI\venv\Scripts`）注入 PATH；使用 pm2 或
+  手动 `node server.js` 启动时请显式设置：
+  ```bash
+  set PYTHON_BIN=D:\Comfy\ComfyUI\venv\Scripts\python.exe
+  ```
+  Pillow 缺失时启动后会打出一次性警告，且画布适配退化为直接复制（视频首帧可能被 H3 裁切头部）。
 - **OpenAI API Key**（仅 GPT Image 2 引擎需要，支持任意 OpenAI 兼容中转端点）
 
 ## 快速启动
@@ -48,6 +59,7 @@ AI Fashion Studio 是一套面向服装电商、快时尚品牌与独立设计�
 ### 1. 安装依赖
 ```bash
 npm install
+pip install -r requirements.txt
 ```
 
 ### 2. 配置密钥
@@ -62,6 +74,9 @@ OPENAI_IMAGE_QUALITY=high
 ### 3. 启动服务
 确保本地已运行 ComfyUI（默认端口 `http://127.0.0.1:8188`）：
 ```bash
+# macOS / Linux 一键启动
+./start.sh
+
 # Windows 一键脚本（自动拉起 ComfyUI 检测与 Web 服务）
 start.bat
 
@@ -70,13 +85,34 @@ node server.js
 ```
 访问 Web 界面：`http://localhost:3000`
 
+### 4. 停止服务
+```bash
+# macOS / Linux
+./stop.sh
+
+# Windows
+stop.bat
+```
+
 ---
 
 ## 项目结构
 
 ```text
 fashion_ui/
-├── server.js               # Node.js 后端服务（ComfyUI WebSocket 通信、双阶段编排、FIFO 队列）
+├── server.js               # 入口：装配 src/ 模块并监听端口
+├── src/
+│   ├── paths.js            # 目录与画布常量（ASPECT_CANVAS）
+│   ├── prompt-catalog/     # 提示词目录（纯数据：场景/风格/发型/脸型/动作）
+│   ├── prompts/            # 提示词组装（纯函数，可单测）
+│   ├── images/             # PNG 尺寸读取、画布对齐、平铺图检测、Python 桥（异步）
+│   ├── comfy/              # ComfyUI 客户端（WS 进度）、节点校验、空闲显存释放
+│   ├── store/tasks.js      # 任务/批量内存存储与生命周期清理
+│   ├── queue/fifo.js       # 全局 FIFO 执行队列
+│   ├── jobs/               # runGenerationJob 两阶段编排（stage1Still / stage2Video）
+│   ├── routes/             # Express Router（catalog/config/generate/history…）
+│   └── http/               # createApp 装配、multer 上传、统一错误中间件
+├── tests/                  # node:test 单测 + HTTP 接口测试（npm test）
 ├── services/
 │   ├── config.js           # 配置加载（.env / config.json / Web 界面三级优先级）
 │   └── imagegen/
@@ -92,9 +128,8 @@ fashion_ui/
 │   ├── app.js              # 前端交互逻辑、任务轮询、瀑布流历史
 │   ├── style.css           # 暗色系 UI 样式（含瀑布流网格）
 │   └── vendor/phosphor/    # Phosphor Icons 本体
-├── crop_to_aspect.py       # 按所选比例无损居中裁剪定妆照
-├── resize_to_canvas.py     # 视频首帧画布对齐
-├── detect_flatlay.py       # 服装平铺图检测
+├── crop_to_canvas.py        # 定妆照画布适配：精确尺寸直通 / 少 px 修正 / 头部保护式裁剪
+├── detect_flatlay.py        # 服装平铺图检测
 ├── .env.example            # 环境变量模板
 ├── package.json            # 项目描述与依赖
 ├── start.bat / restart.bat / stop.bat   # Windows 服务脚本

@@ -17,6 +17,7 @@ async function generateReferenceImage({
   task,
   taskId,
   prompt,
+  signal,
   onProgress,
   context = {}
 }) {
@@ -27,8 +28,10 @@ async function generateReferenceImage({
       task,
       taskId,
       prompt,
+      signal,
       projectInputDir: context.projectInputDir,
       projectImageDir: context.projectImageDir,
+      aspectCanvas: context.aspectCanvas,
       onProgress
     });
   }
@@ -38,14 +41,17 @@ async function generateReferenceImage({
     task,
     taskId,
     prompt,
+    signal,
     projectInputDir: context.projectInputDir,
     projectImageDir: context.projectImageDir,
     comfyTempInputDir: context.comfyTempInputDir,
     comfyOutputDir: context.comfyOutputDir,
+    comfyRemote: context.comfyRemote,
+    comfyUrl: context.comfyUrl,
     workflowsDir: context.workflowsDir,
     aspectCanvas: context.aspectCanvas,
     randomSeed: context.randomSeed,
-    detectFlatlayScoreSync: context.detectFlatlayScoreSync,
+    detectFlatlayScore: context.detectFlatlayScore,
     requireNodes: context.requireNodes,
     submitComfyWorkflow: context.submitComfyWorkflow,
     onProgress
