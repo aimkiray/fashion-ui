@@ -583,6 +583,17 @@
                   </button>
                 </div>
 
+                 <div class="inspector-presets">
+                   <div class="inspector-presets-row">
+                     <input type="text" id="presetNameInput" class="preset-name-input" placeholder="预设名称（如：街拍-牛仔-成片），留空自动命名" maxlength="60">
+                     <button type="button" class="btn-preset" id="btnSavePromptPreset" title="将当前三段最终提示词保存为预设"><i class="ph ph-floppy-disk"></i> 保存预设</button>
+                   </div>
+                   <div class="inspector-presets-row" id="presetManageRow" style="display: none;">
+                     <select id="presetSelect" class="preset-select"></select>
+                     <button type="button" class="btn-preset" id="btnApplyPromptPreset" title="载入该预设到上方三个提示词框（生成时作为自定义覆盖）"><i class="ph ph-download-simple"></i> 应用</button>
+                     <button type="button" class="btn-preset btn-preset-danger" id="btnDeletePromptPreset" title="删除所选预设"><i class="ph ph-trash"></i> 删除</button>
+                   </div>
+                 </div>
                 <div class="inspector-field">
                   <div class="inspector-field-header">
                     <label for="inspectorKreaPrompt">

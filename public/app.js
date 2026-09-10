@@ -2437,6 +2437,84 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     syncAudioButtonState();
   });
 
+  // ── 提示词预设：保存/应用/删除当前三段最终提示词 ──
+  // 应用 = 把预设写回检查器文本框；生成时的 diff 机制会自动将其作为自定义覆盖发送。
+  const PROMPT_PRESETS_KEY = 'fashion_ui_prompt_presets_v1';
+  const presetNameInput = document.getElementById('presetNameInput');
+  const presetSelect = document.getElementById('presetSelect');
+  const presetManageRow = document.getElementById('presetManageRow');
+  const btnSavePromptPreset = document.getElementById('btnSavePromptPreset');
+  const btnApplyPromptPreset = document.getElementById('btnApplyPromptPreset');
+  const btnDeletePromptPreset = document.getElementById('btnDeletePromptPreset');
+
+  function loadPromptPresets() {
+    try { return JSON.parse(localStorage.getItem(PROMPT_PRESETS_KEY)) || []; }
+    catch (e) { return []; }
+  }
+  function persistPromptPresets(list) {
+    try { localStorage.setItem(PROMPT_PRESETS_KEY, JSON.stringify(list)); }
+    catch (e) { console.warn('Failed to save prompt presets:', e); }
+  }
+  function renderPresetOptions() {
+    const list = loadPromptPresets();
+    if (presetManageRow) presetManageRow.style.display = list.length ? 'flex' : 'none';
+    if (!presetSelect) return;
+    presetSelect.innerHTML = '';
+    list.forEach((p, i) => {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = p.name;
+      presetSelect.appendChild(opt);
+    });
+  }
+  btnSavePromptPreset.addEventListener('click', () => {
+    const krea = inspectorKreaPrompt ? inspectorKreaPrompt.value.trim() : '';
+    const seg1 = inspectorSeg1Prompt ? inspectorSeg1Prompt.value.trim() : '';
+    const seg2 = inspectorSeg2Prompt ? inspectorSeg2Prompt.value.trim() : '';
+    if (!krea && !seg1 && !seg2) { showToast('提示词为空，无法保存', true); return; }
+    let name = (presetNameInput && presetNameInput.value.trim()) || '';
+    if (!name) {
+      name = getSceneName(selectedScene || 'street') + ' · ' +
+        new Date().toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+    const list = loadPromptPresets();
+    const existing = list.findIndex(p => p.name === name);
+    const entry = {
+      name,
+      savedAt: new Date().toISOString(),
+      meta: getSceneName(selectedScene || 'street') + ' · ' +
+        (document.querySelector('input[name="gender"]:checked')?.value === 'male' ? '男' : '女'),
+      krea, seg1, seg2
+    };
+    if (existing >= 0) list[existing] = entry; else list.push(entry);
+    persistPromptPresets(list);
+    renderPresetOptions();
+    if (presetSelect) presetSelect.value = String(list.findIndex(p => p.name === name));
+    showToast(existing >= 0 ? `预设「${name}」已更新` : `预设「${name}」已保存`);
+  });
+  btnApplyPromptPreset.addEventListener('click', () => {
+    if (!presetSelect) return;
+    const list = loadPromptPresets();
+    const p = list[Number(presetSelect.value)];
+    if (!p) { showToast('请先选择要应用的预设', true); return; }
+    if (inspectorKreaPrompt && p.krea) { inspectorKreaPrompt.value = p.krea; adjustTextareaHeight(inspectorKreaPrompt); }
+    if (inspectorSeg1Prompt && p.seg1) { inspectorSeg1Prompt.value = p.seg1; adjustTextareaHeight(inspectorSeg1Prompt); }
+    if (inspectorSeg2Prompt && p.seg2) { inspectorSeg2Prompt.value = p.seg2; adjustTextareaHeight(inspectorSeg2Prompt); }
+    updatePromptInspectorBadges();
+    showToast(`已应用预设「${p.name}」—— 生成时将作为自定义覆盖`);
+  });
+  btnDeletePromptPreset.addEventListener('click', () => {
+    const list = loadPromptPresets();
+    const p = list[Number(presetSelect && presetSelect.value)];
+    if (!p) return;
+    if (!window.confirm(`删除预设「${p.name}」?`)) return;
+    const kept = list.filter(x => x.name !== p.name);
+    persistPromptPresets(kept);
+    renderPresetOptions();
+    showToast('预设已删除');
+  });
+  renderPresetOptions();
+
   // Lightbox Zoom
   function openLightbox(src) {
     lightboxImg.src = src;
