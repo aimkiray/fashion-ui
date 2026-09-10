@@ -35,7 +35,8 @@ function h3SegPrompt(sceneId, actionId, seg, isM, extra = '', prevActionId = nul
 
   let handGuidance = '双手自然舒展放松，处于视野内的手部五指健全自然微屈，指节分明无粘连穿模，不盲目插兜握拳。';
   if (actionId === 'pocket_stand') {
-    handGuidance = '插兜单手顺应口袋自然收纳、严禁穿模畸变；另一只手在身侧放松微垂，五指自然微屈无多指。';
+    // 与 beats 的条件式一致：服装可能没有口袋，手部动作跟随首帧实际服装
+    handGuidance = '若服装有口袋：单手顺应口袋自然插袋，严禁穿模畸变；若无口袋：单手自然轻扶在大腿侧，不凭空捏出衣袋。另一只手在身侧放松微垂，五指自然微屈无多指。';
   } else if (['coffee_sip', 'phone_check', 'bag_shift'].includes(actionId)) {
     handGuidance = '手部动作自然协调，与道具或包带握持接触真实无穿模粘连，指节自然舒展微屈，五指正常无多指。';
   } else if (['hair_tuck', 'jacket_adjust'].includes(actionId)) {
