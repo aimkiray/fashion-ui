@@ -292,6 +292,51 @@ test('Composition section exists across all scenes and all three reference paths
   assert.equal(sideOf(computeTaskPrompts({ scene: 'street', gender: 'female', scene_image: 's.png' }).krea_prompt), sideOf(base.krea_prompt));
 });
 
+test('garment-layer invariants: jacket_adjust anchoring, zero residue, global locks, conditional family', () => {
+  // ── 1. jacket_adjust 锚定（a1/a2 两种触发 × 男女）──
+  for (const gender of ['female', 'male']) {
+    const s1 = computeTaskPrompts({ scene: 'street', gender, action1: 'jacket_adjust', action2: 'pose' });
+    assert.ok(s1.seg1_prompt.includes('只接触首帧服装上真实存在的部位'), `${gender}: anchoring missing`);
+    assert.ok(s1.seg1_prompt.includes('不凭空出现大衣、外套、西装或任何新增的衣物层'), `${gender}: no-new-layers missing`);
+    assert.ok(s1.seg1_prompt.includes('没有任何衣物新增或消失'), `${gender}: count invariant missing`);
+    const s2 = computeTaskPrompts({ scene: 'street', gender, action1: 'pose', action2: 'jacket_adjust' });
+    assert.ok(s2.seg2_prompt.includes('不凭空出现大衣、外套、西装或任何新增的衣物层'), `${gender}: seg2 anchoring missing`);
+  }
+
+  // ── 2. 旧文本零残留（防 B 档整档重写带回旧文案）──
+  for (const id of H3_ACTION_IDS) {
+    assert.ok(!/大衣翻领|西装驳头|夹克门襟|翻领版型|指腹轻触/.test(JSON.stringify(H3_ACTIONS[id])), `${id} contains pre-rewrite collar text`);
+    const seg = computeTaskPrompts({ scene: 'street', action1: id, action2: 'pose' });
+    assert.ok(!seg.seg1_prompt.includes('耳饰或领口在手势掠过后清晰展现'), `${id}: unconditioned earrings hallucination residue`);
+  }
+
+  // ── 3. 全局不变量全量锁（最关键的防回归锁：遍历全部 15 动作 seg1+seg2）──
+  for (const id of H3_ACTION_IDS) {
+    const s1 = computeTaskPrompts({ scene: 'street', action1: id, action2: 'pose' });
+    assert.ok(s1.seg1_prompt.includes('服装件数与首帧完全一致：全程只穿着首帧中已有的衣物'), `${id}: seg1 count invariant missing`);
+    assert.ok(s1.seg1_prompt.includes('凭空出现或消失衣物层（外套/披肩/围巾/帽子）'), `${id}: seg1 layer blacklist missing`);
+    const s2 = computeTaskPrompts({ scene: 'street', action1: 'pose', action2: id });
+    assert.ok(s2.seg2_prompt.includes('服装件数与首帧完全一致：全程只穿着首帧中已有的衣物'), `${id}: seg2 count invariant missing`);
+    assert.ok(s2.seg2_prompt.includes('凭空出现或消失衣物层'), `${id}: seg2 layer blacklist missing`);
+  }
+
+  // ── 4. 条件式家族锁 ──
+  const pocket = computeTaskPrompts({ scene: 'street', action1: 'pocket_stand', action2: 'pose' });
+  assert.ok(pocket.seg1_prompt.includes('若服装有口袋'));
+  assert.ok(pocket.seg1_prompt.includes('若无口袋'));
+  const hair = computeTaskPrompts({ scene: 'street', action1: 'hair_tuck', action2: 'pose' });
+  assert.ok(hair.seg1_prompt.includes('若发型有脸侧散发'));
+  assert.ok(hair.seg1_prompt.includes('若为束发、盘发或短发'));
+  const bench = computeTaskPrompts({ scene: 'street', action1: 'bench_sit', action2: 'pose' });
+  assert.ok(bench.seg1_prompt.includes('座位在首帧画面中已经存在'));
+  const win = computeTaskPrompts({ scene: 'street', action1: 'window_browse', action2: 'pose' });
+  assert.ok(win.seg1_prompt.includes('橱窗在首帧画面中已经存在'));
+  const sip = computeTaskPrompts({ scene: 'cafe', action1: 'coffee_sip', action2: 'pose' });
+  assert.ok(sip.seg1_prompt.includes('轻抿咖啡时自然启唇啜饮'));
+  const walk = computeTaskPrompts({ scene: 'street', action1: 'walk', action2: 'pose' });
+  assert.ok(walk.seg1_prompt.includes('模特全程自然闭唇'));
+});
+
 test('computeTaskPrompts injects props into Stage 1 and adapts kid posture', () => {
   const { resolveActions } = require('../../src/prompts/computeTaskPrompts');
   const coffeeOut = computeTaskPrompts({ scene: 'street', action1: 'coffee_sip', action2: 'walk' });
