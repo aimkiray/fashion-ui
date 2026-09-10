@@ -84,6 +84,11 @@ function computeTaskPrompts({
   const { action1: a1, action2: a2 } = resolveActions(action1, action2, sceneConfig.id);
   kreaPrompt = injectActionProps(kreaPrompt, a1, a2, sceneConfig.id);
 
+  // 显式双道具（a1≠a2 均为手持物）：H3 物体持续性弱，两件手持物在分镜交接处
+  // 会互相变形（用户实测：手机变成手提包）——两段都加防变形约束。
+  const dualProp = a1 !== a2 && PROP_ACTIONS.includes(a1) && PROP_ACTIONS.includes(a2);
+  const morphGuard = '画面中的两件随身物品（手机/咖啡杯/挎包）全程同时存在、各自独立清晰，形态与位置稳定，不互相变形或融合；手部动作按分镜节拍依次进行。';
+
   // 道具/环境物仅由 seg2 触发时（a1 不涉及），seg1 提示词也要锚定它们的存在：
   // 定妆照对两个分镜共享首帧，seg1 不提它们，H3 可能中途删掉、seg2 又需要。
   let seg1Extra = cleanCustom;
@@ -94,15 +99,19 @@ function computeTaskPrompts({
   if (!ENV_PROPS.includes(a1) && ENV_PROPS.includes(a2)) {
     keepHints.push('画面中出现的场景物件（长椅或玻璃橱窗）保持自然稳定，不凭空消失、不变形、不移位。');
   }
+  if (dualProp) {
+    keepHints.push('画面中的两件随身物品（手机/咖啡杯/挎包）全程同时存在、各自独立清晰，形态与位置稳定，不互相变形或融合；手部动作按分镜节拍依次进行。');
+  }
   if (keepHints.length) {
     const keepText = keepHints.join('');
     seg1Extra = seg1Extra ? `${seg1Extra}\n${keepText}` : keepText;
   }
+  const seg2Extra = dualProp ? (cleanCustom ? `${cleanCustom}\n${morphGuard}` : morphGuard) : cleanCustom;
 
   return {
     krea_prompt: kreaPrompt,
     seg1_prompt: h3SegPrompt(sceneConfig.id, a1, 1, isM, seg1Extra, null, compositionMode),
-    seg2_prompt: h3SegPrompt(sceneConfig.id, a2, 2, isM, cleanCustom, a1, compositionMode),
+    seg2_prompt: h3SegPrompt(sceneConfig.id, a2, 2, isM, seg2Extra, a1, compositionMode),
     actions: { seg1: a1, seg2: a2 }
   };
 }
@@ -115,15 +124,23 @@ function resolveActions(action1 = 'random', action2 = 'random', scene = 'street'
     ? H3_ACTION_IDS.filter(id => id !== 'bench_sit' && id !== 'window_browse')
     : H3_ACTION_IDS;
 
+  // 道具动作互斥（随机解析）：两个分镜各自持不同手持物时，H3 的弱物体持续性
+  // 会让物品在分镜交接处互相变形（如手机变成挎包）。随机时一条视频至多一件
+  // 手持道具；显式选择不受限（由防变形约束兜底）。
+  const isProp = (id) => PROP_ACTIONS.includes(id);
+  const excludeOtherProps = (pool, keepId) => isProp(keepId)
+    ? pool.filter(id => !PROP_ACTIONS.includes(id) || id === keepId)
+    : pool;
+
   if (a1 === 'random' && a2 === 'random') {
     a1 = poolBase[Math.floor(Math.random() * poolBase.length)];
-    const pool = poolBase.filter(id => id !== a1);
+    const pool = excludeOtherProps(poolBase.filter(id => id !== a1), a1);
     a2 = pool[Math.floor(Math.random() * pool.length)] || a1;
   } else if (a1 === 'random') {
-    const pool = poolBase.filter(id => id !== a2);
+    const pool = excludeOtherProps(poolBase.filter(id => id !== a2), a2);
     a1 = pool[Math.floor(Math.random() * pool.length)] || a2;
   } else if (a2 === 'random') {
-    const pool = poolBase.filter(id => id !== a1);
+    const pool = excludeOtherProps(poolBase.filter(id => id !== a1), a1);
     a2 = pool[Math.floor(Math.random() * pool.length)] || a1;
   }
   return { action1: a1, action2: a2 };
@@ -231,25 +248,33 @@ function resolveBatchActions(selectedScenes = [], action1 = 'random', action2 = 
 
     let a1, a2;
 
+    // 道具互斥：同一条视频的两个分镜不持不同手持物（防物品变形）
+    const propExcl = (pool, keepId) => {
+      const filtered = keepId && PROP_ACTIONS.includes(keepId)
+        ? pool.filter(id => !PROP_ACTIONS.includes(id) || id === keepId)
+        : pool;
+      return filtered.length > 0 ? filtered : pool;
+    };
+
     if (isA1Random && isA2Random) {
       let a1Pool = poolBase.filter(id => !usedActions.has(id));
       if (a1Pool.length < 2) a1Pool = poolBase;
       a1 = a1Pool[Math.floor(Math.random() * a1Pool.length)];
       usedActions.add(a1);
 
-      let a2Pool = poolBase.filter(id => id !== a1 && !usedActions.has(id));
+      let a2Pool = propExcl(poolBase.filter(id => id !== a1 && !usedActions.has(id)), a1);
       if (a2Pool.length === 0) a2Pool = poolBase.filter(id => id !== a1);
       a2 = a2Pool[Math.floor(Math.random() * a2Pool.length)] || a1;
       usedActions.add(a2);
     } else if (isA1Random) {
       a2 = normTaskAction(action2, 'pose');
-      let a1Pool = poolBase.filter(id => id !== a2 && !usedActions.has(id));
+      let a1Pool = propExcl(poolBase.filter(id => id !== a2 && !usedActions.has(id)), a2);
       if (a1Pool.length === 0) a1Pool = poolBase.filter(id => id !== a2);
       a1 = a1Pool[Math.floor(Math.random() * a1Pool.length)] || 'walk';
       usedActions.add(a1);
     } else {
       a1 = normTaskAction(action1, 'walk');
-      let a2Pool = poolBase.filter(id => id !== a1 && !usedActions.has(id));
+      let a2Pool = propExcl(poolBase.filter(id => id !== a1 && !usedActions.has(id)), a1);
       if (a2Pool.length === 0) a2Pool = poolBase.filter(id => id !== a1);
       a2 = a2Pool[Math.floor(Math.random() * a2Pool.length)] || 'pose';
       usedActions.add(a2);
