@@ -20,11 +20,13 @@ function computeTaskPrompts({
   action2 = 'random',
   hair_style = 'natural',
   face_shape = 'oval',
-  model_age = 'adult'
+  model_age = 'adult',
+  composition = 'auto'
 } = {}) {
   const modelStyleKey = MODEL_STYLES[model_style] ? model_style : 'classic';
   const sceneConfig = SCENES[scene] || SCENES.street;
   const isM = gender === 'male';
+  const compositionMode = ['auto', 'center', 'left', 'right'].includes(composition) ? composition : 'auto';
 
   const cleanCustom = stripTextboxNoise(custom_prompt);
   const cleanCustomScene = stripTextboxNoise(custom_scene);
@@ -38,7 +40,8 @@ function computeTaskPrompts({
     cleanCustomModelStyle,
     hair_style,
     face_shape,
-    model_age
+    model_age,
+    compositionMode
   );
 
   let kreaPrompt = prompts.krea_prompt;
@@ -56,7 +59,7 @@ function computeTaskPrompts({
     kreaPrompt = [
       'Reference images: image 1 is the garment only — ignore any person, mannequin, hanger, background, or lighting shown in it. Image 2 is the model whose identity must be preserved.',
       `Task: transfer the clothing from image 1 onto the ${modelGenderLabel} from image 2. Change only the clothing.`,
-      `Composition: ${buildCompositionInstructions(`${sceneConfig.id}:model:${modelGenderLabel}`).text}`,
+      `Composition: ${buildCompositionInstructions(`${sceneConfig.id}:model:${modelGenderLabel}`, compositionMode).text}`,
       'Preserve from image 2: exact facial features and facial identity, eye and nose shape, hairstyle, skin tone, body proportions, and apparent age.',
       `Preserve from image 1: ${GARMENT_PRESERVE_LIST} ${GARMENT_COMBINE}`,
       `Scene & pose: standing ${sceneEnv}, full body visible head-to-toe with complete footwear and realistic soft ground contact shadows beneath footwear, facing forward toward the camera in a front or flattering three-quarter front view with front of the outfit and full face clearly visible, never back turned to camera, ${poseForAge('arms resting naturally at the sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift')}. Soft direct eye contact with a warm genuine presence, serene composed expression, naturally closed lips without tension, relaxed natural jawline.`,
@@ -69,7 +72,7 @@ function computeTaskPrompts({
     kreaPrompt = [
       'Reference images: image 1 is the background environment only — ignore any people, mannequins, or text shown in it. Image 2 is the garment only — ignore any person, mannequin, or background shown in it.',
       `Task: create a photorealistic editorial lookbook photograph of a ${subj} wearing the garment from image 2, placed in the environment from image 1. Change only the clothing and the surrounding placement.`,
-      `Composition: ${buildCompositionInstructions(`${sceneConfig.id}:scene:${gender}`).text}`,
+      `Composition: ${buildCompositionInstructions(`${sceneConfig.id}:scene:${gender}`, compositionMode).text}`,
       `Preserve from image 2: ${GARMENT_PRESERVE_LIST} ${GARMENT_COMBINE}`,
       `Scene & pose: standing full-length on natural ground with realistic soft ground contact shadows beneath footwear, facing forward toward the camera in a front or flattering three-quarter front view with front of the outfit and full face clearly visible, never back turned to camera, ${poseForAge('arms resting naturally at the sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift')}. Soft direct eye contact with a warm genuine presence, face angle natural and alive. Serene composed expression, naturally closed lips without tension, relaxed natural jawline.`,
       'Light & color: realistic illumination matched to the background environment. Keep garment, skin, and background colors faithful; no heavy yellow or orange cast.',
@@ -98,8 +101,8 @@ function computeTaskPrompts({
 
   return {
     krea_prompt: kreaPrompt,
-    seg1_prompt: h3SegPrompt(sceneConfig.id, a1, 1, isM, seg1Extra),
-    seg2_prompt: h3SegPrompt(sceneConfig.id, a2, 2, isM, cleanCustom, a1),
+    seg1_prompt: h3SegPrompt(sceneConfig.id, a1, 1, isM, seg1Extra, null, compositionMode),
+    seg2_prompt: h3SegPrompt(sceneConfig.id, a2, 2, isM, cleanCustom, a1, compositionMode),
     actions: { seg1: a1, seg2: a2 }
   };
 }

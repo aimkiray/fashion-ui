@@ -17,7 +17,8 @@ router.post('/api/preview-prompts', (req, res) => {
       action2 = 'random',
       hair_style = 'natural',
       face_shape = 'oval',
-      model_age = 'adult'
+      model_age = 'adult',
+      composition = 'auto'
     } = req.body || {};
 
     const prompts = computeTaskPrompts({
@@ -33,7 +34,8 @@ router.post('/api/preview-prompts', (req, res) => {
       action2,
       hair_style,
       face_shape,
-      model_age
+      model_age,
+      composition
     });
 
     res.json(prompts);

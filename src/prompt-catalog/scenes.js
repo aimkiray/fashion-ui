@@ -14,11 +14,11 @@ const SCENES = {
     icon: 'buildings',
     description: '阳光洒落的都市街头，自然光影景深，亲密POV眼神交流与潮流编辑感姿势',
     sceneEnvironment: 'on a sunlit city street sidewalk with historic brownstone buildings, natural directional sunlight casting soft ground shadows',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult', compositionMode = 'auto') => {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian female editorial model', 'stylish East Asian male editorial model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`street:${gender}`).text;
+      const composition = buildCompositionInstructions(`street:${gender}`, compositionMode).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -42,11 +42,11 @@ const SCENES = {
     icon: 'camera',
     description: '纯色摄影棚无影墙，高端柔光箱打光，突出眼神交流与姿态几何',
     sceneEnvironment: 'in a clean minimalist studio against a neutral grey cyclorama backdrop, diffuse softbox studio lighting',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult', compositionMode = 'auto') => {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'professional East Asian female model', 'professional East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`studio:${gender}`).text;
+      const composition = buildCompositionInstructions(`studio:${gender}`, compositionMode).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -70,11 +70,11 @@ const SCENES = {
     icon: 'building',
     description: '现代玻璃幕墙大厦大堂，晨光透射，干练优雅的商务编辑感',
     sceneEnvironment: 'in the quiet morning lobby of a modern glass corporate skyscraper with a low reception counter and a few potted plants, polished granite floors with subtle realistic reflections, soft daylight through the tall glass curtain wall',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult', compositionMode = 'auto') => {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'chic East Asian professional female model', 'chic East Asian professional male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`office:${gender}`).text;
+      const composition = buildCompositionInstructions(`office:${gender}`, compositionMode).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -98,11 +98,11 @@ const SCENES = {
     icon: 'storefront',
     description: '奢华大理石与柔光射灯的高端专柜，突出女性气质与眼神光',
     sceneEnvironment: 'in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, warm 3200K architectural recessed spotlights',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult', compositionMode = 'auto') => {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'graceful East Asian female fashion model', 'graceful East Asian male fashion model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`boutique:${gender}`).text;
+      const composition = buildCompositionInstructions(`boutique:${gender}`, compositionMode).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -126,11 +126,11 @@ const SCENES = {
     icon: 'leaf',
     description: '绿意盎然的公园石板路与林荫微风，柔和眼神回眸与浪漫编辑感',
     sceneEnvironment: 'on a quiet tree-lined park path with uneven weathered stone pavers, mature green trees and low hedges, scattered fallen leaves, soft diffused daylight through the leaves with gentle natural shadow patches',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult', compositionMode = 'auto') => {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'natural East Asian female model', 'natural East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`outdoor:${gender}`).text;
+      const composition = buildCompositionInstructions(`outdoor:${gender}`, compositionMode).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -154,11 +154,11 @@ const SCENES = {
     icon: 'coffee',
     description: '落地窗暖调咖啡馆，慵懒而亲密的生活编辑感',
     sceneEnvironment: 'in a cozy modern cafe with warm timber oak interiors, a few simple wooden tables and chairs, and large floor-to-ceiling windows, soft natural daylight through the windows',
-    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult') => {
+    buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult', compositionMode = 'auto') => {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian female model', 'stylish East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const composition = buildCompositionInstructions(`cafe:${gender}`).text;
+      const composition = buildCompositionInstructions(`cafe:${gender}`, compositionMode).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,
@@ -182,7 +182,7 @@ const SCENES = {
     icon: 'palette',
     description: '自由描述任意个性化展示背景（海滩落日、雪山木屋、赛博霓虹、古风江南等），保持眼神交流与真实皮肤质感',
     sceneEnvironment: 'in an aesthetic commercial fashion lookbook background, natural commercial lighting',
-    buildPrompts: (gender = 'female', customPrompt = '', customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult') => {
+    buildPrompts: (gender = 'female', customPrompt = '', customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult', compositionMode = 'auto') => {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian female editorial model', 'stylish East Asian male editorial model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
@@ -190,7 +190,7 @@ const SCENES = {
       const sceneDesc = /^(in|on|at|against|under|near|along)\b/i.test(rawScene)
         ? rawScene.replace(/^(In|On|At|Against|Under|Near|Along)\b/, (m) => m.toLowerCase())
         : `in ${rawScene}`;
-      const composition = buildCompositionInstructions(`custom:${gender}`).text;
+      const composition = buildCompositionInstructions(`custom:${gender}`, compositionMode).text;
       return {
         krea_prompt: buildLookbookPrompt({
           subj,

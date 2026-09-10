@@ -3,7 +3,7 @@ const { H3_ACTIONS } = require("../prompt-catalog/h3Actions");
 // 按【最高优先级】→【5秒核心动作】→【表情与眼神】→【真实人体动态】
 // →【服装与手部】→【镜头】→【画面质感】→【严格去除AI味】→【最终效果】→【音频】
 // 组装单个分镜提示词；她/他按性别替换；分镜二自动加承接句。
-function h3SegPrompt(sceneId, actionId, seg, isM, extra = '', prevActionId = null) {
+function h3SegPrompt(sceneId, actionId, seg, isM, extra = '', prevActionId = null, compositionMode = 'auto') {
   const cfg = H3_SCENE_CFG[sceneId] || H3_SCENE_CFG.custom;
   const act = H3_ACTIONS[actionId] || H3_ACTIONS.walk;
   const pro = isM ? '他' : '她';
@@ -99,7 +99,7 @@ ${handGuidance}
 ${camera}
 
 运镜速度与距离控制准则：全程保持恒定展示视距，运镜平稳流畅，严禁快速推近、变焦冲镜与镜头拖拽（Strictly No Fast Push-in / No Crash Zoom）。镜头追求稳，人物动作追求轻快——两者解耦，不得因镜头克制而放慢人物动作。
-构图沿用首帧的三分法布局：人物保持在画面同一侧的三分之一区域，头顶留白与地面留白全程保持，不要让人物居中顶满画面（环绕/弧形运镜期间允许人物随视差短暂偏移，运镜结束后回到原有三分之一区域）。
+构图沿用首帧的${compositionMode === 'center' ? '居中对称布局：人物保持在画面中央竖直轴线上，左右留白对称' : '三分法布局：人物保持在画面同一侧的三分之一区域'}，头顶留白与地面留白全程保持，不要让人物漂移出既定构图区域（环绕/弧形运镜期间允许人物随视差短暂偏移，运镜结束后回到原有位置）。
 
 ━━━━━━━━━━━━━━━━━━
 【画面质感】

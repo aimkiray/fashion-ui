@@ -393,6 +393,29 @@
             </div>
           </div>
 
+          <div class="option-group" id="compositionGroup">
+            <label>构图方式</label>
+            <div class="radio-pills">
+              <label class="pill-label" title="三分法自动偏置：人物落在左/右三分线上（左右由系统按配置稳定决定），留出负空间平衡画面">
+                <input type="radio" name="compositionMode" value="auto" checked>
+                <span><i class="ph ph-crop"></i> 三分法 (自动)</span>
+              </label>
+              <label class="pill-label" title="居中对称构图：人物落在画面中轴线上，左右留白对称，时尚 lookbook 经典排布">
+                <input type="radio" name="compositionMode" value="center">
+                <span><i class="ph ph-arrows-out-line-vertical"></i> 居中对称</span>
+              </label>
+              <label class="pill-label" title="手动指定：人物中轴落在画面左侧三分线上">
+                <input type="radio" name="compositionMode" value="left">
+                <span><i class="ph ph-arrow-line-left"></i> 偏左三分</span>
+              </label>
+              <label class="pill-label" title="手动指定：人物中轴落在画面右侧三分线上">
+                <input type="radio" name="compositionMode" value="right">
+                <span><i class="ph ph-arrow-line-right"></i> 偏右三分</span>
+              </label>
+            </div>
+            <p class="action-hint">经典构图原理：人物不居中顶满画幅，头顶留白约 10% 画高、脚下 4-6% 地面，另一侧留出负空间平衡画面。构图会沿用到视频全程。</p>
+          </div>
+
           <div class="option-group">
             <label>视频动作（分镜一 → 分镜二）</label>
             <div class="action-selects">

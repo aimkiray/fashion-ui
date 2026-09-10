@@ -38,6 +38,7 @@ router.post('/api/generate', async (req, res) => {
     face_shape = 'oval',
     model_age = 'adult',
     enhance = false,
+    composition = 'auto',
     existing_still = null
   } = req.body;
 
@@ -100,6 +101,7 @@ router.post('/api/generate', async (req, res) => {
     custom_seg1_prompt: typeof seg1_prompt === 'string' && seg1_prompt.trim() ? seg1_prompt.trim() : null,
     custom_seg2_prompt: typeof seg2_prompt === 'string' && seg2_prompt.trim() ? seg2_prompt.trim() : null,
     aspect_ratio,
+    composition: ['auto', 'center', 'left', 'right'].includes(composition) ? composition : 'auto',
     image: sanitizedImage,
     model_image: sanitizedModelImage,
     scene_image: isCustomScene ? sanitizedSceneImage : null,
@@ -171,7 +173,8 @@ router.post('/api/generate-batch', async (req, res) => {
     hair_style = 'natural',
     face_shape = 'oval',
     model_age = 'adult',
-    enhance = false
+    enhance = false,
+    composition = 'auto'
   } = req.body;
 
   // Whitelist: unknown aspect ratios fall back to 3:4.
@@ -179,6 +182,7 @@ router.post('/api/generate-batch', async (req, res) => {
 
   // Strict boolean: client may send "false" as a string
   const enhanceEnabled = enhance === true || enhance === 'true';
+  const compositionMode = ['auto', 'center', 'left', 'right'].includes(composition) ? composition : 'auto';
 
   if (!image) {
     return res.status(400).json({ error: '缺少服装图片文件名' });
@@ -233,6 +237,7 @@ router.post('/api/generate-batch', async (req, res) => {
       mode,
       // 超清增强: 3D Latent Upscale 1080p + RIFE 插帧（远端装模型后生效）
       enhance: enhanceEnabled,
+      composition: compositionMode,
       stillImage: null,
       videoUrl: null,
       createdAt: new Date().toISOString(),

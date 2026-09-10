@@ -544,6 +544,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       const aspectRatio = document.querySelector('input[name="aspectRatio"]:checked')?.value || '3:4';
       const stillEngine = document.querySelector('input[name="stillEngine"]:checked')?.value || 'gpt_image_2';
       const genMode = document.querySelector('input[name="genMode"]:checked')?.value || 'video';
+      const compositionMode = document.querySelector('input[name="compositionMode"]:checked')?.value || 'auto';
       const enhanceMode = document.querySelector('input[name="enhanceMode"]:checked')?.value || 'off';
       // These used to be closure variables; after the refactor they live only in
       // the DOM. Referencing the old names here threw a ReferenceError that the
@@ -564,6 +565,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
         aspectRatio,
         stillEngine,
         genMode,
+        compositionMode,
         enhanceMode,
         seg1Action,
         seg2Action,
@@ -671,6 +673,10 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     }
     if (opts.genMode) {
       const el = document.querySelector(`input[name="genMode"][value="${opts.genMode}"]`);
+      if (el) el.checked = true;
+    }
+    if (opts.compositionMode) {
+      const el = document.querySelector(`input[name="compositionMode"][value="${opts.compositionMode}"]`);
       if (el) el.checked = true;
     }
     if (opts.enhanceMode) {
@@ -1338,6 +1344,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
           hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
           face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
           model_age: document.querySelector('input[name="modelAge"]:checked')?.value || 'adult',
+          composition: document.querySelector('input[name="compositionMode"]:checked')?.value || 'auto',
           custom_prompt: customPrompt,
           model_image: hasModelImg ? 'placeholder_model.png' : null,
           scene_image: hasSceneImg ? 'placeholder_scene.png' : null
@@ -1634,6 +1641,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
           hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
           face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
           model_age: document.querySelector('input[name="modelAge"]:checked')?.value || 'adult',
+          composition: document.querySelector('input[name="compositionMode"]:checked')?.value || 'auto',
           enhance: genMode !== 'still_only' && document.querySelector('input[name="enhanceMode"]:checked')?.value === 'on',
         })
       });
@@ -1725,6 +1733,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
           hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
           face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
           model_age: document.querySelector('input[name="modelAge"]:checked')?.value || 'adult',
+          composition: document.querySelector('input[name="compositionMode"]:checked')?.value || 'auto',
           enhance: document.querySelector('input[name="enhanceMode"]:checked')?.value === 'on'
         })
       });
@@ -1869,6 +1878,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
             hair_style: document.querySelector('input[name="hairStyle"]:checked')?.value || 'natural',
             face_shape: document.querySelector('input[name="faceShape"]:checked')?.value || 'oval',
             model_age: document.querySelector('input[name="modelAge"]:checked')?.value || 'adult',
+            composition: document.querySelector('input[name="compositionMode"]:checked')?.value || 'auto',
             enhance: genMode !== 'still_only' && document.querySelector('input[name="enhanceMode"]:checked')?.value === 'on',
           })
         });
