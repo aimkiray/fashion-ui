@@ -1827,16 +1827,18 @@ kbd {
   background: rgba(217, 92, 92, 0.16);
 }
 
-/* "Generate video from this still" — compact inline action on image cards */
+/* "Generate video from this still" — full-width slim action row under the meta */
 .history-video-btn {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  margin-left: 8px;
-  padding: 2px 7px;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 4px 0;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(19, 18, 21, 0.6);
+  background: transparent;
   color: var(--text-muted);
   font-size: 10px;
   line-height: 1.4;
@@ -1848,7 +1850,7 @@ kbd {
 .history-video-btn:hover {
   color: var(--accent, #d15468);
   border-color: var(--accent, #d15468);
-  background: rgba(209, 84, 104, 0.16);
+  background: rgba(209, 84, 104, 0.12);
 }
 
 .history-card.history-deleting {

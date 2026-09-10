@@ -2352,8 +2352,8 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
             <div class="history-size">
               <span class="history-badge ${isVideo ? 'badge-video' : 'badge-image'}">${isVideo ? '10s 视频' : '定妆照'}</span>
               <span>${escapeHtml(item.size)}</span>
-              ${!isVideo ? `<button class="history-video-btn" type="button" title="用此定妆照直接生成 10 秒视频"><i class="ph ph-video-camera"></i> 生成视频</button>` : ''}
             </div>
+            ${!isVideo ? `<button class="history-video-btn" type="button" title="用此定妆照直接生成 10 秒视频"><i class="ph ph-video-camera"></i> 生成视频</button>` : ''}
           </div>
         `;
         card.querySelector('.history-delete').addEventListener('click', async (ev) => {
