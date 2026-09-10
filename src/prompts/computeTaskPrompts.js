@@ -4,7 +4,7 @@ const { H3_ACTION_IDS, normTaskAction } = require("../prompt-catalog/h3Actions")
 const { styledSubject } = require("./styledSubject");
 const { h3SegPrompt } = require("./h3SegPrompt");
 const { stripTextboxNoise } = require("./textbox");
-const { GARMENT_PRESERVE, GARMENT_COMBINE } = require("./lookbookSections");
+const { GARMENT_PRESERVE_LIST, GARMENT_COMBINE } = require("./lookbookSections");
 // Centralized authoritative prompt computation for preview and execution
 function computeTaskPrompts({
   scene = 'street',
@@ -42,20 +42,21 @@ function computeTaskPrompts({
 
   let kreaPrompt = prompts.krea_prompt;
 
-  const kidPose = 'A relaxed, natural stance with cute natural kidswear proportions, charming balanced posture, playful and unposed';
+  const kidPose = 'a relaxed, natural stance with cute natural kidswear proportions, charming balanced posture, playful and unposed';
   const poseForAge = (base) => (model_age === 'toddler' || model_age === 'child') ? kidPose : base;
 
   if (model_image) {
     const customEnvPreposition = /^(in|on|at|against|under|near|along)\s+/i.test(cleanCustomScene) ? '' : 'in ';
+    const normalizedScene = cleanCustomScene.replace(/^(In|On|At|Against|Under|Near|Along)\b/, (m) => m.toLowerCase());
     const sceneEnv = (sceneConfig.id === 'custom' && cleanCustomScene)
-      ? `${customEnvPreposition}${cleanCustomScene}, realistic lighting consistent with the environment`
+      ? `${customEnvPreposition}${normalizedScene}, realistic lighting consistent with the environment`
       : (sceneConfig.sceneEnvironment || 'in an aesthetic fashion lookbook background, natural commercial lighting');
     const modelGenderLabel = isM ? 'male model' : 'female model';
     kreaPrompt = [
       'Reference images: image 1 is the garment only — ignore any person, mannequin, hanger, background, or lighting shown in it. Image 2 is the model whose identity must be preserved.',
       `Task: transfer the clothing from image 1 onto the ${modelGenderLabel} from image 2. Change only the clothing.`,
       'Preserve from image 2: exact facial features and facial identity, eye and nose shape, hairstyle, skin tone, body proportions, and apparent age.',
-      `Preserve from image 1: ${GARMENT_PRESERVE} ${GARMENT_COMBINE}`,
+      `Preserve from image 1: ${GARMENT_PRESERVE_LIST} ${GARMENT_COMBINE}`,
       `Scene & pose: standing ${sceneEnv}, full body visible head-to-toe with complete footwear and realistic soft ground contact shadows beneath footwear, ${poseForAge('arms resting naturally at the sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift')}. Soft direct eye contact with a warm genuine presence, serene composed expression, naturally closed lips without tension, relaxed natural jawline.`,
       'Light & color: realistic lighting consistent with the environment. Keep garment, skin, and background colors faithful; no heavy yellow or orange cast.',
       'Style: photorealistic real photograph, honest and unposed, with real skin texture, visible pores, and natural color. No glamorization, no heavy retouching. Shot like a film photograph with subtle organic film grain.',
@@ -66,7 +67,7 @@ function computeTaskPrompts({
     kreaPrompt = [
       'Reference images: image 1 is the background environment only — ignore any people, mannequins, or text shown in it. Image 2 is the garment only — ignore any person, mannequin, or background shown in it.',
       `Task: create a photorealistic editorial lookbook photograph of a ${subj} wearing the garment from image 2, placed in the environment from image 1. Change only the clothing and the surrounding placement.`,
-      `Preserve from image 2: ${GARMENT_PRESERVE} ${GARMENT_COMBINE}`,
+      `Preserve from image 2: ${GARMENT_PRESERVE_LIST} ${GARMENT_COMBINE}`,
       `Scene & pose: standing full-length on natural ground with realistic soft ground contact shadows beneath footwear, ${poseForAge('arms resting naturally at the sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift')}. Soft direct eye contact with a warm genuine presence, face angle natural and alive. Serene composed expression, naturally closed lips without tension, relaxed natural jawline.`,
       'Light & color: realistic illumination matched to the background environment. Keep garment, skin, and background colors faithful; no heavy yellow or orange cast.',
       'Style: photorealistic real photograph, honest and unposed, with real skin texture, visible pores, and natural color. No glamorization, no heavy retouching. Shot like a film photograph with subtle organic film grain.',
@@ -122,7 +123,7 @@ const PROP_ACTIONS = ['coffee_sip', 'phone_check', 'bag_shift'];
 // 道具注入（A2 修复）：道具动作与"双臂自然垂放、双手放松"的基础姿态句硬冲突，
 // 注入道具时必须同步替换该姿态句。ARM_PHRASE 同时匹配场景层（大写 Both arms）
 // 与分支层（小写 arms）两种措辞。
-const ARM_PHRASE = /[Aa]rms resting naturally at (?:the )?sides?(?: with subtle organic elbow curvature)?,?\s*[Hh]ands relaxed and fully visible with five natural fingers/;
+const ARM_PHRASE = /(?:Both )?[Aa]rms resting naturally at (?:the )?sides?(?: with subtle organic elbow curvature)?,?\s*[Hh]ands relaxed and fully visible with five natural fingers/;
 
 const PROP_POSE = {
   coffee_sip: 'one arm bent naturally holding a sleek takeaway coffee cup at waist height, the other arm relaxed at the side, both hands relaxed and fully visible with five natural fingers',
@@ -130,13 +131,18 @@ const PROP_POSE = {
   bag_shift: 'a stylish chic leather shoulder bag worn over one shoulder with one hand resting lightly on the strap, hands relaxed and fully visible with five natural fingers'
 };
 
+// 双道具/三道具组合不能由单道具句拼接（会互相矛盾），逐组合预写：
+const PROP_COMBOS = {
+  'coffee_sip+phone_check': 'one hand holding a sleek takeaway coffee cup at waist height while the other hand holds a sleek modern smartphone at chest height, both arms bent naturally, fingers relaxed and fully visible with five natural fingers',
+  'coffee_sip+bag_shift': 'one hand holding a sleek takeaway coffee cup at waist height, a stylish chic leather shoulder bag worn over the other shoulder with its strap resting naturally, hands relaxed and fully visible with five natural fingers',
+  'phone_check+bag_shift': 'both hands holding a sleek modern smartphone at chest height, a stylish chic leather shoulder bag worn over one shoulder, fingers relaxed and fully visible with five natural fingers',
+  'coffee_sip+phone_check+bag_shift': 'one hand holding a sleek takeaway coffee cup at waist height while the other hand holds a sleek modern smartphone at chest height, a stylish chic leather shoulder bag worn over one shoulder, fingers relaxed and fully visible with five natural fingers'
+};
+
 function injectActionProps(promptText, a1, a2) {
-  const used = new Set([a1, a2]);
-  const propTexts = ['coffee_sip', 'phone_check', 'bag_shift']
-    .filter(a => used.has(a))
-    .map(a => PROP_POSE[a]);
-  if (!propTexts.length) return promptText;
-  const propText = propTexts.join(', ');
+  const used = ['coffee_sip', 'phone_check', 'bag_shift'].filter(a => a1 === a || a2 === a);
+  if (!used.length) return promptText;
+  const propText = PROP_COMBOS[used.join('+')] || PROP_POSE[used[0]];
 
   if (ARM_PHRASE.test(promptText)) {
     return promptText.replace(ARM_PHRASE, propText);

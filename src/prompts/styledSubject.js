@@ -32,7 +32,7 @@ function styledSubject(gender, style, femaleBase, maleBase, customStylePrompt = 
     // E2: 年龄串已含 chubby cheeks/innocent eyes，这里不再重复堆叠 dewy/innocent
     modBody = isM
       ? 'sunny boyish charm, naturally closed lips with a faint happy smile, and playful balanced natural posture'
-      : 'sweet cheerful charm, naturally closed lips with a soft happy smile, and playful balanced natural posture';
+      : 'naturally closed lips with a soft happy smile, and cheerful balanced natural posture';
   } else {
     const s = MODEL_STYLES[style] || MODEL_STYLES.classic;
     const modifier = isM ? s.male : s.female;
@@ -41,8 +41,10 @@ function styledSubject(gender, style, femaleBase, maleBase, customStylePrompt = 
     if (ageKey === 'teen') {
       modBody = modBody
         .replace(/sculpted high-fashion supermodel presence/gi, 'fresh expressive presence')
+        .replace(/high-fashion supermodel charisma/gi, 'fresh charismatic presence')
         .replace(/commanding runway posture/gi, 'natural upright posture')
-        .replace(/runway posture/gi, 'natural posture');
+        .replace(/runway posture/gi, 'natural posture')
+        .replace(/supermodel/gi, 'model');
     }
   }
 

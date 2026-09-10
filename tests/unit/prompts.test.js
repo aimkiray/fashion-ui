@@ -182,6 +182,33 @@ test('h3SegPrompt adapts hand rules dynamically to avoid semantic collision with
   assert.ok(pSeg2AfterCoffee.includes('移出特写画幅'));
 });
 
+test('restructured lookbook prompts: sections, prop arm replacement, teen protection', () => {
+  // 分节结构（官方指南要求）在所有场景存在
+  const tags = ['Scene:', 'Subject:', 'Outfit:', 'Pose & gaze:', 'Light & color:', 'Style:', 'Constraints:'];
+  for (const scene of ['street', 'studio', 'office', 'boutique', 'outdoor', 'cafe', 'custom']) {
+    const p = computeTaskPrompts({ scene });
+    for (const tag of tags) assert.ok(p.krea_prompt.includes(tag), `${scene} missing ${tag}`);
+    assert.ok(!/intimate POV/i.test(p.krea_prompt), `${scene} still has POV residue`);
+    assert.ok(p.krea_prompt.includes('neckline shape') && p.krea_prompt.includes('print placement'), `${scene} preserve list incomplete`);
+  }
+
+  // 道具注入必须替换中性臂句，且不得残留 "Both " 前缀腐蚀
+  const coffee = computeTaskPrompts({ scene: 'street', action1: 'coffee_sip', action2: 'walk' });
+  assert.ok(!/Both (one arm|both hands)/.test(coffee.krea_prompt), '"Both " prefix survived prop replacement');
+  assert.ok(!coffee.krea_prompt.includes('arms resting naturally at sides'), 'neutral arm sentence must be replaced for prop actions');
+  assert.ok(coffee.krea_prompt.includes('holding a sleek takeaway coffee cup'));
+
+  // 双道具组合不得自相矛盾（coffee 单臂垂放 vs phone 双手持机）
+  const dual = computeTaskPrompts({ scene: 'street', action1: 'coffee_sip', action2: 'phone_check' });
+  assert.ok(dual.krea_prompt.includes('coffee cup') && dual.krea_prompt.includes('smartphone'));
+  assert.ok(!/the other arm relaxed/.test(dual.krea_prompt), 'dual-prop combo must not claim a relaxed arm');
+  assert.ok(!/Both (one arm|both hands)/.test(dual.krea_prompt));
+
+  // teen × classic × male：supermodel 修饰必须清除
+  const teenMale = computeTaskPrompts({ scene: 'street', gender: 'male', model_age: 'teen', model_style: 'classic' });
+  assert.ok(!/supermodel/i.test(teenMale.krea_prompt), 'teen male leaks supermodel phrasing');
+});
+
 test('computeTaskPrompts injects props into Stage 1 and adapts kid posture', () => {
   const { resolveActions } = require('../../src/prompts/computeTaskPrompts');
   const coffeeOut = computeTaskPrompts({ scene: 'street', action1: 'coffee_sip', action2: 'walk' });

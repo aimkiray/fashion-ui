@@ -31,7 +31,7 @@ const MODEL_STYLES = {
   },
   youthful: {
     name: '元气阳光',
-    female: 'with lively youthful energy, bright sparkling eyes radiating cheerful vitality, fresh glowing skin, and light springy posture',
+    female: 'with lively youthful energy, bright sparkling eyes radiating cheerful vitality, fresh natural skin, and light springy posture',
     male: 'with sunny youthful energy, bright lively eyes and fresh open expression, healthy natural skin, and light energetic posture'
   },
   intellectual: {
@@ -51,7 +51,7 @@ const MODEL_STYLES = {
   },
   petite: {
     name: '小巧可爱',
-    female: 'with petite adorable charm, small slim frame and fine-boned delicate figure, big bright expressive eyes, smooth natural skin, and cute perky posture',
+    female: 'with petite adorable charm, small slim frame and fine-boned delicate figure, big bright expressive eyes, natural clear skin, and cute perky posture',
     male: 'with cute boyish charm, small lean frame, bright lively eyes, fresh clear skin, and playful relaxed posture'
   }
 };
