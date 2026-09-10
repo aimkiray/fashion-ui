@@ -3,7 +3,7 @@ const MODEL_AGES = {
   toddler: {
     name: '幼儿 (3岁)',
     enName: 'Toddler (3yo)',
-    female: 'in her early childhood (around 3-4 years old), an adorable toddler girl with natural soft chubby cheeks, innocent sparkling eyes, dewy skin, and playful sweet charm',
+    female: 'in her early childhood (around 3-4 years old), an adorable toddler girl with natural soft chubby cheeks, soft natural skin, and playful sweet charm',
     male: 'in his early childhood (around 3-4 years old), an adorable toddler boy with natural soft chubby cheeks, innocent sparkling eyes, clean skin, and playful lively charm'
   },
   child: {
@@ -15,19 +15,19 @@ const MODEL_AGES = {
   teen: {
     name: '少年 (14岁)',
     enName: 'Teen (14yo)',
-    female: 'in her early teens (around 14-15 years old), a fresh-faced young teen with youthful innocence, dewy glowing skin, and energetic natural charm',
+    female: 'in her early teens (around 14-15 years old), a fresh-faced young teen with youthful innocence, fresh natural skin, and energetic natural charm',
     male: 'in his early teens (around 14-15 years old), a spirited young teen with youthful boyish charm, clean smooth skin, and energetic upright stance'
   },
   youth: {
     name: '青年 (20岁)',
     enName: 'Youth (20yo)',
-    female: 'in her youthful early twenties (around 20-22 years old), with fresh dewy skin and vibrant energetic presence',
+    female: 'in her youthful early twenties (around 20-22 years old), with fresh natural skin and vibrant energetic presence',
     male: 'in his youthful early twenties (around 20-22 years old), with clean smooth skin and vibrant energetic presence'
   },
   adult: {
     name: '成年 (28岁)',
     enName: 'Adult (28yo)',
-    female: 'in her prime late twenties (around 26-28 years old), with elegant poised posture and refined glowing complexion',
+    female: 'in her prime late twenties (around 26-28 years old), with refined natural complexion',
     male: 'in his prime late twenties (around 26-28 years old), with confident poised stance and sharp clean complexion'
   },
   middle_aged: {
@@ -45,8 +45,8 @@ const MODEL_AGES = {
   elderly: {
     name: '老年 (65岁)',
     enName: 'Elderly (65yo)',
-    female: 'in her dignified sixties, with radiant silver-grey hair, timeless aristocratic grace, serene wisdom, and striking regal elegance',
-    male: 'in his distinguished sixties, with handsome silver hair, timeless aristocratic presence, calm distinguished authority, and refined elegance'
+    female: 'in her dignified sixties, with timeless aristocratic grace, serene wisdom, and striking regal elegance',
+    male: 'in his distinguished sixties, with timeless aristocratic presence, calm distinguished authority, and refined elegance'
   }
 };
 

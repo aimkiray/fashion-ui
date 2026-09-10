@@ -1,15 +1,10 @@
 const { styledSubject } = require("../prompts/styledSubject");
+const { buildLookbookPrompt } = require("../prompts/lookbookSections");
 
-function adaptKidPosture(text, ageKey) {
-  if (ageKey !== 'toddler' && ageKey !== 'child') return text;
-  return text
-    .replace(/waistline and long legs forming gentle lines/g, 'cute natural kidswear proportions, charming balanced stance')
-    .replace(/waistline visible beneath tailored garments, long legs forming clean lines/g, 'charming neat kidswear proportions, cute natural posture')
-    .replace(/waistline visible, long legs forming gentle lines/g, 'cute natural kidswear proportions, charming gentle posture')
-    .replace(/Composed executive stance/g, 'Cheerful natural stance')
-    .replace(/Relaxed editorial stance/g, 'Sweet natural child stance');
-}
-
+// Each scene provides its flavor strings; the shared builder assembles the
+// labeled sections recommended by the official image-prompting guide.
+// Kid (toddler/child) pose handling is centralized in the builder via ageKey,
+// so every scene gets kid-appropriate proportions without per-scene patches.
 const SCENES = {
   street: {
     id: 'street',
@@ -22,9 +17,18 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian female editorial model', 'stylish East Asian male editorial model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: adaptKidPosture(`a ${subj} standing full-length on a sunlit city street sidewalk with historic brownstone buildings, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, if the reference garment is a separate top or bottom, naturally complementing it with a clean tailored matching piece; if the reference is a dress, jumpsuit or one-piece outfit, keeping it as one complete garment without splitting. ${pro} is the clear visual focus, with a soft intimate POV feeling. Direct eye contact with the viewer, head in a gentle three-quarter turn, gaze connecting naturally. Relaxed editorial stance, subtle natural weight shift to one hip, shoulders soft and open, waistline and long legs forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial fashion lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the concrete sidewalk with realistic soft ground contact shadows beneath footwear. Serene composed expression, naturally closed lips without tension, relaxed natural jawline. Clean directional sunlight casting soft realistic ground shadows, neutral-to-warm daylight, clothing colors staying true to the reference garment tones, brick and pavement colors remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering on cheeks, natural catchlights in the eyes, tactile fabric weave and seam details. Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present. Shot on 35mm lens, f/2.8, subtle organic film grain${extra}`, ageKey)
+        krea_prompt: buildLookbookPrompt({
+          subj,
+          pro,
+          ageKey,
+          scene: 'a sunlit city street sidewalk with historic brownstone buildings',
+          pose: 'Relaxed editorial stance, subtle natural weight shift to one hip, shoulders soft and open, waistline and long legs forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
+          gaze: 'Direct eye contact with the viewer, head in a gentle three-quarter turn, gaze connecting naturally.',
+          light: 'Clean directional sunlight from camera left casting soft realistic ground shadows, neutral-to-warm daylight, brick and pavement colors remaining faithful.',
+          lens: '35mm lens, f/2.8',
+          extra: custom
+        })
       };
     }
   },
@@ -39,9 +43,18 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'professional East Asian female model', 'professional East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in a clean minimalist studio against a neutral grey cyclorama backdrop, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, if the reference garment is a separate top or bottom, naturally complementing it with a clean tailored matching piece; if the reference is a dress, jumpsuit or one-piece outfit, keeping it as one complete garment without splitting. ${pro} is the clear visual focus with a soft intimate POV feeling. Slightly lowered chin with eyes lifted toward the lens, a quiet intimate gaze. Elegant upright posture, body turned a quarter away from camera, shoulders soft and open, waistline forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial catalogue lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the matte studio floor with realistic soft ground contact shadows beneath footwear. Serene composed editorial expression, naturally closed lips without tension, relaxed natural jawline. Diffuse softbox studio lighting with soft shadow falloff, clean neutral-to-warm color balance, clothing colors staying true to the reference garment tones, grey backdrop remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering on cheeks, natural catchlights in the eyes, tactile cloth texture and seam details. Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present. Shot on 50mm lens, subtle organic film grain, soft contact shadows${extra}`
+        krea_prompt: buildLookbookPrompt({
+          subj,
+          pro,
+          ageKey,
+          scene: 'a clean minimalist studio against a neutral grey cyclorama backdrop',
+          pose: 'Elegant upright posture, body turned a quarter away from camera, shoulders soft and open, waistline forming gentle lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
+          gaze: 'Slightly lowered chin with eyes lifted toward the lens, a quiet intimate gaze.',
+          light: 'Diffuse softbox studio lighting with soft shadow falloff, grey backdrop remaining faithful.',
+          lens: '50mm lens',
+          extra: custom
+        })
       };
     }
   },
@@ -56,9 +69,18 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'chic East Asian professional female model', 'chic East Asian professional male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: adaptKidPosture(`a ${subj} standing full-length in the quiet morning lobby of a modern glass corporate skyscraper with a low reception counter nearby and polished granite floors, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, if the reference garment is a separate top or bottom, naturally complementing it with a clean tailored matching piece; if the reference is a dress, jumpsuit or one-piece outfit, keeping it as one complete garment without splitting. ${pro} is the clear visual focus with a soft intimate POV feeling. Calm three-quarter eye contact with confident professional warmth, head turned just enough to show the jawline. Composed executive stance, posture relaxed but intentional, shoulders soft and open, waistline visible beneath tailored garments, long legs forming clean lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body executive lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the polished granite floor with realistic soft ground contact shadows beneath footwear and subtle diffuse ambient floor sheen. Naturally closed lips without tension, relaxed natural jawline. Soft diffuse morning daylight through the tall glass curtain wall, clean neutral-to-warm light, granite and glass tones staying faithful, clothing colors remaining true to tone, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile leather grain and fabric drape. Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${extra}`, ageKey)
+        krea_prompt: buildLookbookPrompt({
+          subj,
+          pro,
+          ageKey,
+          scene: 'the quiet morning lobby of a modern glass corporate skyscraper with polished granite floors',
+          pose: 'Composed executive stance, posture relaxed but intentional, shoulders soft and open, waistline visible beneath tailored garments, long legs forming clean lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
+          gaze: 'Calm three-quarter eye contact with confident professional warmth, head turned just enough to show the jawline.',
+          light: 'Soft diffuse morning daylight through the tall glass curtain wall, granite and glass tones staying faithful.',
+          lens: '35mm lens',
+          extra: custom
+        })
       };
     }
   },
@@ -68,14 +90,23 @@ const SCENES = {
     enName: 'Luxury Concept Boutique',
     icon: 'storefront',
     description: '奢华大理石与柔光射灯的高端专柜，突出女性气质与眼神光',
-    sceneEnvironment: 'in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, warm but color-neutral retail spotlights',
+    sceneEnvironment: 'in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, warm 3200K architectural recessed spotlights',
     buildPrompts: (gender = 'female', custom = '', _customScene = '', style = 'classic', customStylePrompt = '', hairKey = 'natural', faceKey = 'oval', ageKey = 'adult') => {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'graceful East Asian female fashion model', 'graceful East Asian male fashion model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, if the reference garment is a separate top or bottom, naturally complementing it with a clean tailored matching piece; if the reference is a dress, jumpsuit or one-piece outfit, keeping it as one complete garment without splitting. ${pro} is the clear visual focus with a soft intimate POV feeling. Soft upward gaze catching warm spotlight reflections, composed direct eye contact with the viewer. Graceful weight on one leg, torso softly angled, shoulders and waistline forming refined elegant lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body luxury retail lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the polished marble floor with realistic soft ground contact shadows beneath footwear and subtle diffuse floor sheen. Serene composed expression, naturally closed lips without tension, relaxed natural jawline. Warm but color-neutral retail spotlights with soft falloff, clean neutral-to-warm color balance, marble and brass tones staying faithful, clothing colors remaining true to tone, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and leather grain. Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${extra}`
+        krea_prompt: buildLookbookPrompt({
+          subj,
+          pro,
+          ageKey,
+          scene: 'a luxury designer concept boutique with polished Italian marble floors and minimalist brass fixtures',
+          pose: 'Graceful weight on one leg, torso softly angled, shoulders and waistline forming refined elegant lines, posture relaxed but intentional. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
+          gaze: 'Gaze meeting the camera levelly with warm spotlight catchlights in the eyes, composed direct eye contact with the viewer.',
+          light: 'Warm but color-neutral retail spotlights with soft falloff, marble and brass tones staying faithful.',
+          lens: '35mm lens',
+          extra: custom
+        })
       };
     }
   },
@@ -90,9 +121,18 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'natural East Asian female model', 'natural East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: adaptKidPosture(`a ${subj} standing full-length on a quiet tree-lined park path with uneven weathered stone pavers, mature green foliage and low hedges, a few scattered fallen leaves on the ground, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, if the reference garment is a separate top or bottom, naturally complementing it with a clean tailored matching piece; if the reference is a dress, jumpsuit or one-piece outfit, keeping it as one complete garment without splitting. ${pro} is the clear visual focus with a soft intimate POV feeling. A side-angle body with the gaze turned back over the shoulder toward the viewer, face angle varied and alive. Peaceful relaxed stance beside natural park greenery, posture fluid and natural, shoulders soft and open, waistline visible, long legs forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body lifestyle lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the stone pavers with realistic soft ground contact shadows beneath footwear. Serene gentle expression, naturally closed lips without tension, relaxed natural jawline. Soft diffused outdoor daylight filtering through the tree canopy, gentle organic shadow patches on the path, clean neutral-to-warm color balance, green foliage staying true to tone without oversaturation, worn stone colors remaining faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile cloth folds and texture. Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${extra}`, ageKey)
+        krea_prompt: buildLookbookPrompt({
+          subj,
+          pro,
+          ageKey,
+          scene: 'a quiet tree-lined park path with uneven weathered stone pavers, mature green foliage and low hedges, a few scattered fallen leaves on the ground',
+          pose: 'Peaceful relaxed stance beside natural park greenery, posture fluid and natural, shoulders soft and open, waistline visible, long legs forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
+          gaze: 'A side-angle body with the gaze turned back over the shoulder toward the viewer, face angle varied and alive.',
+          light: 'Soft mid-morning daylight filtered through the tree canopy, dappled shadow patches on the path, neutral white balance with a slight green bounce from the foliage.',
+          lens: '35mm lens',
+          extra: custom
+        })
       };
     }
   },
@@ -107,9 +147,18 @@ const SCENES = {
       const isM = gender === 'male';
       const subj = styledSubject(gender, style, 'stylish East Asian female model', 'stylish East Asian male model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
-      const extra = custom ? `, ${custom}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length in a cozy modern cafe with warm timber oak interiors, a few simple wooden tables and chairs, and large floor-to-ceiling windows, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, if the reference garment is a separate top or bottom, naturally complementing it with a clean tailored matching piece; if the reference is a dress, jumpsuit or one-piece outfit, keeping it as one complete garment without splitting. ${pro} is the clear visual focus with a soft intimate POV feeling. Chin softly lifted, head turned three-quarters toward the lens, warm approachable eye contact. Casual editorial stance near the window, body language relaxed but intentional, shoulders soft and open, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body cozy editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on the hardwood floor with realistic soft ground contact shadows beneath footwear. Relaxed serene expression, naturally closed lips without tension, relaxed natural jawline. Warm natural window light with soft interior fill, clean neutral-to-warm color balance, warm oak and cream tones staying faithful, without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile knit and fabric weave. Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${extra}`
+        krea_prompt: buildLookbookPrompt({
+          subj,
+          pro,
+          ageKey,
+          scene: 'a cozy modern cafe with warm timber oak interiors, simple wooden tables and chairs, and large floor-to-ceiling windows',
+          pose: 'Casual editorial stance near the window, body language relaxed but intentional, shoulders soft and open, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
+          gaze: 'Chin softly lifted, head turned three-quarters toward the lens, warm approachable eye contact.',
+          light: 'Warm natural window light with soft interior fill, warm oak and cream tones staying faithful.',
+          lens: '35mm lens',
+          extra: custom
+        })
       };
     }
   },
@@ -125,12 +174,21 @@ const SCENES = {
       const subj = styledSubject(gender, style, 'stylish East Asian female editorial model', 'stylish East Asian male editorial model', customStylePrompt, hairKey, faceKey, ageKey);
       const pro = isM ? 'he' : 'she';
       const rawScene = (customScene && customScene.trim()) ? customScene.trim() : 'an aesthetic commercial fashion lookbook background';
-      const sceneDesc = /^(in|on|at|against|under|near|along)\s+/i.test(rawScene)
-        ? rawScene
+      const sceneDesc = /^(in|on|at|against|under|near|along)\b/i.test(rawScene)
+        ? rawScene.replace(/^(In|On|At|Against|Under|Near|Along)\b/, (m) => m.toLowerCase())
         : `in ${rawScene}`;
-      const extra = customPrompt ? `, ${customPrompt}` : '';
       return {
-        krea_prompt: `a ${subj} standing full-length ${sceneDesc}, transfer the outfit, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, if the reference garment is a separate top or bottom, naturally complementing it with a clean tailored matching piece; if the reference is a dress, jumpsuit or one-piece outfit, keeping it as one complete garment without splitting. ${pro} is the clear visual focus with a soft intimate POV feeling. Soft direct eye contact with a warm genuine presence, face angle natural and alive. Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear. Serene composed expression, naturally closed lips without tension, relaxed natural jawline. Realistic natural lighting consistent with the environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${extra}`
+        krea_prompt: buildLookbookPrompt({
+          subj,
+          pro,
+          ageKey,
+          scene: sceneDesc,
+          pose: 'Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Both arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers.',
+          gaze: 'Soft direct eye contact with a warm genuine presence, face angle natural and alive.',
+          light: 'Realistic natural lighting consistent with the environment.',
+          lens: '35mm lens',
+          extra: customPrompt
+        })
       };
     }
   }

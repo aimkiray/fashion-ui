@@ -4,6 +4,7 @@ const { H3_ACTION_IDS, normTaskAction } = require("../prompt-catalog/h3Actions")
 const { styledSubject } = require("./styledSubject");
 const { h3SegPrompt } = require("./h3SegPrompt");
 const { stripTextboxNoise } = require("./textbox");
+const { GARMENT_PRESERVE, GARMENT_COMBINE } = require("./lookbookSections");
 // Centralized authoritative prompt computation for preview and execution
 function computeTaskPrompts({
   scene = 'street',
@@ -41,16 +42,36 @@ function computeTaskPrompts({
 
   let kreaPrompt = prompts.krea_prompt;
 
+  const kidPose = 'A relaxed, natural stance with cute natural kidswear proportions, charming balanced posture, playful and unposed';
+  const poseForAge = (base) => (model_age === 'toddler' || model_age === 'child') ? kidPose : base;
+
   if (model_image) {
     const customEnvPreposition = /^(in|on|at|against|under|near|along)\s+/i.test(cleanCustomScene) ? '' : 'in ';
     const sceneEnv = (sceneConfig.id === 'custom' && cleanCustomScene)
       ? `${customEnvPreposition}${cleanCustomScene}, realistic lighting consistent with the environment`
       : (sceneConfig.sceneEnvironment || 'in an aesthetic fashion lookbook background, natural commercial lighting');
     const modelGenderLabel = isM ? 'male model' : 'female model';
-    kreaPrompt = `Create an editorial lookbook portrait. Transfer the clothing and outfit from the first reference image onto the ${modelGenderLabel} in the second reference image, strictly preserving their exact facial features, facial identity, eye shape, nose shape, and hairstyle, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, if the reference garment is a separate top or bottom, naturally complementing it with a clean tailored matching piece; if the reference is a dress, jumpsuit or one-piece outfit, keeping it as one complete garment without splitting. ${isM ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling, standing ${sceneEnv}. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Soft direct eye contact with warm genuine presence, serene composed expression, naturally closed lips without tension, relaxed natural jawline. Realistic lighting consistent with the environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
+    kreaPrompt = [
+      'Reference images: image 1 is the garment only — ignore any person, mannequin, hanger, background, or lighting shown in it. Image 2 is the model whose identity must be preserved.',
+      `Task: transfer the clothing from image 1 onto the ${modelGenderLabel} from image 2. Change only the clothing.`,
+      'Preserve from image 2: exact facial features and facial identity, eye and nose shape, hairstyle, skin tone, body proportions, and apparent age.',
+      `Preserve from image 1: ${GARMENT_PRESERVE} ${GARMENT_COMBINE}`,
+      `Scene & pose: standing ${sceneEnv}, full body visible head-to-toe with complete footwear and realistic soft ground contact shadows beneath footwear, ${poseForAge('arms resting naturally at the sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift')}. Soft direct eye contact with a warm genuine presence, serene composed expression, naturally closed lips without tension, relaxed natural jawline.`,
+      'Light & color: realistic lighting consistent with the environment. Keep garment, skin, and background colors faithful; no heavy yellow or orange cast.',
+      'Style: photorealistic real photograph, honest and unposed, with real skin texture, visible pores, and natural color. No glamorization, no heavy retouching. Shot like a film photograph with subtle organic film grain.',
+      `Constraints: no text, no watermarks, no logos; props stay small and secondary if present.${cleanCustom ? ` Additional user requirements (follow only where they do not conflict with the constraints above): ${cleanCustom}` : ''}`
+    ].join('\n');
   } else if (scene_image) {
     const subj = styledSubject(gender, modelStyleKey, 'stylish female model', 'stylish male model', cleanCustomModelStyle, hair_style, face_shape, model_age);
-    kreaPrompt = `Create an editorial lookbook portrait of a ${subj} standing full-length in the background environment from the first reference image, wearing the exact clothing and outfit from the second reference image, strictly preserving the exact garment length, cut, and silhouette from the reference image, crisp clean hemline strictly following the reference garment boundary, if the reference garment is a separate top or bottom, naturally complementing it with a clean tailored matching piece; if the reference is a dress, jumpsuit or one-piece outfit, keeping it as one complete garment without splitting. ${isM ? 'He' : 'She'} is the clear visual focus with a soft intimate POV feeling. Soft direct eye contact with warm genuine presence, face angle natural and alive. Elegant confident posture, body language relaxed but intentional, shoulders soft and open, waistline visible, posture forming gentle lines. Full body editorial lookbook photography, head-to-toe framed with complete shoes and feet firmly planted on ground with realistic soft ground contact shadows beneath footwear, arms resting naturally at sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift. Serene composed expression, naturally closed lips without tension, relaxed natural jawline. Realistic illumination matched to the background environment, clean neutral-to-warm color balance, clothing and background colors remaining faithful without heavy yellow or orange filter. Authentic human skin texture with visible natural pores, fine skin lines, subtle peach fuzz, natural skin sheen, realistic subsurface scattering, natural catchlights in the eyes, tactile fabric weave and seam details. Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present. Shot on 35mm lens, subtle organic film grain${cleanCustom ? ', ' + cleanCustom : ''}`;
+    kreaPrompt = [
+      'Reference images: image 1 is the background environment only — ignore any people, mannequins, or text shown in it. Image 2 is the garment only — ignore any person, mannequin, or background shown in it.',
+      `Task: create a photorealistic editorial lookbook photograph of a ${subj} wearing the garment from image 2, placed in the environment from image 1. Change only the clothing and the surrounding placement.`,
+      `Preserve from image 2: ${GARMENT_PRESERVE} ${GARMENT_COMBINE}`,
+      `Scene & pose: standing full-length on natural ground with realistic soft ground contact shadows beneath footwear, ${poseForAge('arms resting naturally at the sides with subtle organic elbow curvature, hands relaxed and fully visible with five natural fingers, subtle natural weight shift')}. Soft direct eye contact with a warm genuine presence, face angle natural and alive. Serene composed expression, naturally closed lips without tension, relaxed natural jawline.`,
+      'Light & color: realistic illumination matched to the background environment. Keep garment, skin, and background colors faithful; no heavy yellow or orange cast.',
+      'Style: photorealistic real photograph, honest and unposed, with real skin texture, visible pores, and natural color. No glamorization, no heavy retouching. Shot like a film photograph with subtle organic film grain.',
+      `Constraints: no text, no watermarks, no logos; props stay small and secondary if present.${cleanCustom ? ` Additional user requirements (follow only where they do not conflict with the constraints above): ${cleanCustom}` : ''}`
+    ].join('\n');
   }
 
   const { action1: a1, action2: a2 } = resolveActions(action1, action2, sceneConfig.id);
@@ -98,25 +119,30 @@ function resolveActions(action1 = 'random', action2 = 'random', scene = 'street'
 // 否则定妆照缺道具会导致 H3 在视频段凭空生成道具。
 const PROP_ACTIONS = ['coffee_sip', 'phone_check', 'bag_shift'];
 
-function injectActionProps(promptText, a1, a2) {
-  const hints = [];
-  const used = new Set([a1, a2]);
-  if (used.has('coffee_sip')) {
-    hints.push('The model naturally holds a sleek takeaway coffee cup in one hand. ');
-  }
-  if (used.has('phone_check')) {
-    hints.push('The model naturally holds a sleek modern smartphone in both hands. ');
-  }
-  if (used.has('bag_shift')) {
-    hints.push('The model wears a stylish chic leather shoulder bag over one shoulder. ');
-  }
-  if (!hints.length) return promptText;
-  const propHint = hints.join('');
+// 道具注入（A2 修复）：道具动作与"双臂自然垂放、双手放松"的基础姿态句硬冲突，
+// 注入道具时必须同步替换该姿态句。ARM_PHRASE 同时匹配场景层（大写 Both arms）
+// 与分支层（小写 arms）两种措辞。
+const ARM_PHRASE = /[Aa]rms resting naturally at (?:the )?sides?(?: with subtle organic elbow curvature)?,?\s*[Hh]ands relaxed and fully visible with five natural fingers/;
 
-  if (promptText.includes('Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present.')) {
-    return promptText.replace('Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present.', `${propHint}Photorealistic real photograph, honest and unposed, with true-to-life fabric behavior and natural color. No text, no watermarks, no logos. No glamorization and no heavy retouching. Props stay small and secondary if present.`);
+const PROP_POSE = {
+  coffee_sip: 'one arm bent naturally holding a sleek takeaway coffee cup at waist height, the other arm relaxed at the side, both hands relaxed and fully visible with five natural fingers',
+  phone_check: 'both hands holding a sleek modern smartphone at chest height with the arms bent naturally, fingers relaxed and fully visible with five natural fingers',
+  bag_shift: 'a stylish chic leather shoulder bag worn over one shoulder with one hand resting lightly on the strap, hands relaxed and fully visible with five natural fingers'
+};
+
+function injectActionProps(promptText, a1, a2) {
+  const used = new Set([a1, a2]);
+  const propTexts = ['coffee_sip', 'phone_check', 'bag_shift']
+    .filter(a => used.has(a))
+    .map(a => PROP_POSE[a]);
+  if (!propTexts.length) return promptText;
+  const propText = propTexts.join(', ');
+
+  if (ARM_PHRASE.test(promptText)) {
+    return promptText.replace(ARM_PHRASE, propText);
   }
-  return promptText + ', ' + propHint.trim();
+  // 兜底：找不到姿态句时追加（不应发生，留作安全网）
+  return promptText + ', ' + propText;
 }
 
 function resolveBatchActions(selectedScenes = [], action1 = 'random', action2 = 'random') {
