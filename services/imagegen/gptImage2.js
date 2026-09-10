@@ -8,8 +8,11 @@ const { parseSseChunk } = require('./sse');
 const { getRawConfig } = require('../config');
 const { runPythonScript } = require('../../src/images/pythonBin');
 
+// Appended to every generation/edit prompt (constraint layer, per the official
+// image-prompting guide: state exclusions and preservation explicitly). Kept
+// size-agnostic - orientation is controlled by the size parameter, not words.
 const OPENAI_IMAGE_OUTPUT_REQUIREMENTS =
-  'Output requirements: portrait orientation, preserve the exact clothing design, silhouette, fabric drape, and colors from the reference garment as faithfully as possible, with realistic human anatomy and grounded posture.';
+  'Output requirements: photorealistic result, preserve the exact clothing design, silhouette, fabric drape, and colors from the reference garment as faithfully as possible, with realistic human anatomy and grounded posture. Full body visible including footwear. No text, no watermarks, no logos.';
 
 // Image generation through budget relays can legitimately take several minutes
 // (queued cheap channels + quality:high). 3 min was too tight and caused
