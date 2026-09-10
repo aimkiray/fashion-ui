@@ -926,7 +926,9 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
           if (sceneChanged) {
             const diffs = getPromptInspectorDiffs();
             if (diffs.hasAnyDiff) {
-              showToast(`已切换至【${sc.name}】，提示词已自动同步为新场景配置`);
+              showToast(pinnedPromptPreset
+                ? `已切换至【${sc.name}】，已应用的提示词预设「${pinnedPromptPreset}」保持钉住`
+                : `已切换至【${sc.name}】，提示词已自动同步为新场景配置`);
             }
             refreshPromptInspector(true);
           } else {
@@ -1356,15 +1358,22 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
 
       const { kreaDiff, seg1Diff, seg2Diff } = getPromptInspectorDiffs();
 
-      // Only update fields that the user hasn't explicitly customized, or if force is true
-      if (!kreaDiff || force) {
-        inspectorKreaPrompt.value = data.krea_prompt || '';
-      }
-      if (!seg1Diff || force) {
-        inspectorSeg1Prompt.value = data.seg1_prompt || '';
-      }
-      if (!seg2Diff || force) {
-        inspectorSeg2Prompt.value = data.seg2_prompt || '';
+      // 已应用提示词预设（钉住）时：即使 force（如切换场景）也不覆盖文本框，
+      // 只同步 cachedAutoPrompts——diff 仍非空，生成时预设继续作为覆盖发送。
+      // 解除钉住的唯一入口是「恢复自动生成」按钮。
+      const pinned = Boolean(pinnedPromptPreset);
+
+      if (!pinned) {
+        // Only update fields that the user hasn't explicitly customized, or if force is true
+        if (!kreaDiff || force) {
+          inspectorKreaPrompt.value = data.krea_prompt || '';
+        }
+        if (!seg1Diff || force) {
+          inspectorSeg1Prompt.value = data.seg1_prompt || '';
+        }
+        if (!seg2Diff || force) {
+          inspectorSeg2Prompt.value = data.seg2_prompt || '';
+        }
       }
 
       cachedAutoPrompts = {
@@ -1373,7 +1382,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
         seg2_prompt: data.seg2_prompt || ''
       };
 
-      if (force) {
+      if (force && !pinned) {
         isPromptsCustomModified = false;
       }
       updatePromptInspectorBadges();
@@ -1463,6 +1472,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
   if (btnResetPrompts) {
     btnResetPrompts.addEventListener('click', (e) => {
       e.preventDefault();
+      pinnedPromptPreset = null; // 解除预设钉住
       refreshPromptInspector(true);
       showToast('已恢复底层提示词自动同步');
     });
@@ -2440,6 +2450,7 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
   // ── 提示词预设：保存/应用/删除当前三段最终提示词 ──
   // 应用 = 把预设写回检查器文本框；生成时的 diff 机制会自动将其作为自定义覆盖发送。
   const PROMPT_PRESETS_KEY = 'fashion_ui_prompt_presets_v1';
+  let pinnedPromptPreset = null; // 已应用预设的名称；非 null 时 refresh 不覆盖文本框
   const presetNameInput = document.getElementById('presetNameInput');
   const presetSelect = document.getElementById('presetSelect');
   const presetManageRow = document.getElementById('presetManageRow');
@@ -2448,12 +2459,19 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
   const btnDeletePromptPreset = document.getElementById('btnDeletePromptPreset');
 
   function loadPromptPresets() {
-    try { return JSON.parse(localStorage.getItem(PROMPT_PRESETS_KEY)) || []; }
-    catch (e) { return []; }
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PROMPT_PRESETS_KEY));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
   }
   function persistPromptPresets(list) {
-    try { localStorage.setItem(PROMPT_PRESETS_KEY, JSON.stringify(list)); }
-    catch (e) { console.warn('Failed to save prompt presets:', e); }
+    try {
+      localStorage.setItem(PROMPT_PRESETS_KEY, JSON.stringify(list));
+      return true;
+    } catch (e) {
+      console.warn('Failed to save prompt presets:', e);
+      return false;
+    }
   }
   function renderPresetOptions() {
     const list = loadPromptPresets();
@@ -2487,7 +2505,10 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
       krea, seg1, seg2
     };
     if (existing >= 0) list[existing] = entry; else list.push(entry);
-    persistPromptPresets(list);
+    if (!persistPromptPresets(list)) {
+      showToast('保存失败：浏览器存储空间不足', true);
+      return;
+    }
     renderPresetOptions();
     if (presetSelect) presetSelect.value = String(list.findIndex(p => p.name === name));
     showToast(existing >= 0 ? `预设「${name}」已更新` : `预设「${name}」已保存`);
@@ -2497,23 +2518,31 @@ const DEFAULT_ACTIONS = { seg1: 'random', seg2: 'random' };
     const list = loadPromptPresets();
     const p = list[Number(presetSelect.value)];
     if (!p) { showToast('请先选择要应用的预设', true); return; }
-    if (inspectorKreaPrompt && p.krea) { inspectorKreaPrompt.value = p.krea; adjustTextareaHeight(inspectorKreaPrompt); }
-    if (inspectorSeg1Prompt && p.seg1) { inspectorSeg1Prompt.value = p.seg1; adjustTextareaHeight(inspectorSeg1Prompt); }
-    if (inspectorSeg2Prompt && p.seg2) { inspectorSeg2Prompt.value = p.seg2; adjustTextareaHeight(inspectorSeg2Prompt); }
+    // 无条件赋值（含空段）：预设的语义就是钉住这三段的内容，空段 = 该段回退自动生成
+    if (inspectorKreaPrompt) { inspectorKreaPrompt.value = p.krea || ''; adjustTextareaHeight(inspectorKreaPrompt); }
+    if (inspectorSeg1Prompt) { inspectorSeg1Prompt.value = p.seg1 || ''; adjustTextareaHeight(inspectorSeg1Prompt); }
+    if (inspectorSeg2Prompt) { inspectorSeg2Prompt.value = p.seg2 || ''; adjustTextareaHeight(inspectorSeg2Prompt); }
+    pinnedPromptPreset = p.name;
     updatePromptInspectorBadges();
-    showToast(`已应用预设「${p.name}」—— 生成时将作为自定义覆盖`);
+    showToast(`已应用预设「${p.name}」（已钉住，切换场景不丢失；「恢复自动生成」解除）`);
   });
   btnDeletePromptPreset.addEventListener('click', () => {
+    const idx = presetSelect ? Number(presetSelect.value) : -1;
+    if (!Number.isInteger(idx) || idx < 0) return;
     const list = loadPromptPresets();
-    const p = list[Number(presetSelect && presetSelect.value)];
+    const p = list[idx];
     if (!p) return;
     if (!window.confirm(`删除预设「${p.name}」?`)) return;
     const kept = list.filter(x => x.name !== p.name);
     persistPromptPresets(kept);
+    pinnedPromptPreset = pinnedPromptPreset === p.name ? null : pinnedPromptPreset;
     renderPresetOptions();
     showToast('预设已删除');
   });
   renderPresetOptions();
+  window.addEventListener('storage', (e) => {
+    if (e.key === PROMPT_PRESETS_KEY) renderPresetOptions();
+  });
 
   // Lightbox Zoom
   function openLightbox(src) {
