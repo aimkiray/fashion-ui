@@ -94,7 +94,7 @@
         "15",
         0
       ],
-      "shift_video": 6,
+      "shift_video": 12,
       "shift_audio": 3
     }
   },
@@ -178,7 +178,7 @@
         0
       ],
       "scheduler": "simple",
-      "steps": 8,
+      "steps": 4,
       "denoise": 1
     }
   },
@@ -414,7 +414,7 @@
         0
       ],
       "scheduler": "simple",
-      "steps": 8,
+      "steps": 4,
       "denoise": 1
     }
   },
