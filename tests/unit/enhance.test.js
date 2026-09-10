@@ -122,6 +122,15 @@ test('HD workflow has no dangling links', () => {
   assertLinksResolve(hdWf);
 });
 
+test('workflows apply quality tuning: 8 steps, fp16 VAE, delayed block-sparse', () => {
+  for (const wf of [baseWf, hdWf]) {
+    assert.equal(wf['21'].inputs.vae_name, 'minimax_h3_video_vae_fp16.safetensors');
+    assert.equal(wf['51'].inputs.steps, 8);
+    assert.equal(wf['85'].inputs.steps, 8);
+    assert.equal(wf['14'].inputs.start_percent, 0.6);
+  }
+});
+
 test('deriveEnhancedName strips the VHS audio twin suffix', () => {
   assert.equal(deriveEnhancedName('outfit_street_10s_x-audio.mp4'), 'outfit_street_10s_x_1080p60.mp4');
   assert.equal(deriveEnhancedName('outfit_street_10s_x.mp4'), 'outfit_street_10s_x_1080p60.mp4');

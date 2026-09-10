@@ -290,3 +290,31 @@ test('h3SegPrompt outputs strict camera velocity principles and anti-crash-zoom 
   // 镜头稳 ≠ 动作慢：必须显式解耦
   assert.ok(prompt.includes('不得因镜头克制而放慢人物动作'));
 });
+
+test('h3SegPrompt enforces hair physical clumping, specular sheen, and anti-smearing constraints', () => {
+  const prompt = h3SegPrompt('street', 'walk', 1, false);
+  assert.ok(prompt.includes('natural hair locks and distinct strand clumping'));
+  assert.ok(prompt.includes('natural specular hair sheen'));
+  assert.ok(prompt.includes('no blurry hair edges, no hair smearing into background, no misty translucent hair'));
+  assert.ok(prompt.includes('不要塑料假发感'));
+});
+
+test('all scenes guarantee front-facing lookbook stance and forbid back-facing views', () => {
+  const allScenes = ['street', 'studio', 'office', 'boutique', 'outdoor', 'cafe', 'custom'];
+  for (const scene of allScenes) {
+    const res = computeTaskPrompts({ scene });
+    assert.ok(res.krea_prompt.includes('facing forward toward the camera'), `${scene} missing facing forward in pose/subject`);
+    assert.ok(res.krea_prompt.includes('never with the back turned to the camera') || res.krea_prompt.includes('never back turned to camera'), `${scene} missing anti-back prohibition`);
+    assert.ok(!/turned back over the shoulder/i.test(res.krea_prompt), `${scene} still contains over-the-shoulder gaze residue`);
+    assert.ok(!/turned a quarter away from camera/i.test(res.krea_prompt), `${scene} still contains turned-away posture residue`);
+  }
+
+  // Also verify model_image and scene_image modes
+  const modelRef = computeTaskPrompts({ scene: 'street', model_image: 'ref.png' });
+  assert.ok(modelRef.krea_prompt.includes('facing forward toward the camera'));
+  assert.ok(modelRef.krea_prompt.includes('never back turned to camera'));
+
+  const sceneRef = computeTaskPrompts({ scene: 'street', scene_image: 'bg.png' });
+  assert.ok(sceneRef.krea_prompt.includes('facing forward toward the camera'));
+  assert.ok(sceneRef.krea_prompt.includes('never back turned to camera'));
+});

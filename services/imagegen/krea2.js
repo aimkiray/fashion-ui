@@ -69,7 +69,17 @@ async function generateKrea2({
     const kreaWf = JSON.parse(fs.readFileSync(kreaWfPath, 'utf-8'));
     requireNodes(kreaWf, 'Krea-2', ['3', '5', '7', '8', '9', '11', '13']);
     kreaWf['5']['inputs']['image'] = stagedInputRef;
-    kreaWf['9']['inputs']['prompt'] = prompt;
+
+    // The Krea workflow runs at cfg=1, where the negative conditioning (node 10)
+    // is mathematically inert — composition constraints must live in the
+    // POSITIVE prompt. Append the front-facing/view constraint unless the
+    // caller's prompt already carries it (the scene templates include it).
+    const KREA2_VIEW_CONSTRAINTS =
+      'The model must face the camera in a front or flattering three-quarter front view, with the full face and the front of the outfit clearly visible; never a back view, never turned away from the camera. No text, no watermarks, no logos.';
+    const basePrompt = String(prompt || '').trim();
+    kreaWf['9']['inputs']['prompt'] = /no back views/i.test(basePrompt)
+      ? basePrompt
+      : `${basePrompt}\n\n${KREA2_VIEW_CONSTRAINTS}`;
 
     if (kreaWf['9']) {
       kreaWf['9']['inputs']['system_prompt'] = task.model_image
@@ -88,6 +98,8 @@ async function generateKrea2({
       kreaWf['9']['inputs']['grounding_px'] = 768;
     }
     if (kreaWf['10']) {
+      // cfg=1: negative conditioning is inert in this workflow, keep it empty
+      // (composition constraints live in the positive prompt above).
       kreaWf['10']['inputs']['prompt'] = '';
       kreaWf['10']['inputs']['grounding_px'] = 768;
     }

@@ -1233,8 +1233,8 @@ kbd {
   background: var(--surface-2);
   color: var(--text-primary);
   resize: vertical;
-  min-height: 76px;
-  max-height: 180px;
+  min-height: 110px;
+  max-height: 240px;
   font-family: inherit;
   box-sizing: border-box;
 }
